@@ -23,6 +23,7 @@ While Douconel is already capable of handling a variety of tasks related to 3D m
 3. Export to Petgraph: Enabling the export of mesh data to Petgraph structures for advanced graph analysis.
 4. export to bevy: enabling importing the dcel as a mesh into bevy..
 5. Export to OBJ/STL: Facilitating the export of meshes to .obj and .stl formats for compatibility with other tools and libraries in the 3D processing ecosystem.
+6. triangulate a higher polygonal mesh -> triangular mesh
 
 ## Contributions
 Contributions to Douconel are welcome! Whether it's adding new features, improving existing ones, or fixing bugs, your help is invaluable. Please refer to the repository's contribution guidelines for more information on how to contribute.
