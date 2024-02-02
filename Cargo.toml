@@ -1,22 +1,13 @@
 [package]
 name = "douconel"
-version = "0.1.0"
+version = "0.0.1"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
-bevy = "0.11.2"
-
-stl_io = "0.7.0"
-obj = "0.10.2"
-rand = "0.8.5"
 itertools = "0.11.0"
-simple-error = "0.3.0"
-strum = "0.25.0"
-strum_macros = "0.25.3"
 serde = "1.0.193"
-serde_json = "1.0.108"
+glam = { version = "0.25.0", features = ["serde"] }
+simple-error = "0.3.0"
 
-tracing = "0.1"
-tracing-subscriber = "0.3"
+slotmap = { version = "1.0.7", features = ["serde"] }
+stl_io = "0.7.0"

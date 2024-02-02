@@ -1,285 +1,681 @@
-use bevy::prelude::*;
+use glam::Vec3;
 use itertools::Itertools;
 use serde::Deserialize;
 use serde::Serialize;
+use simple_error::bail;
+use slotmap::SlotMap;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::Debug;
-use std::marker::PhantomData;
+use std::fs::OpenOptions;
 
-use crate::mem::Memory;
+slotmap::new_key_type! {
+    pub struct VertID;
+    pub struct EdgeID;
+    pub struct FaceID;
+}
 
-#[derive(Default, Clone, Debug)]
-struct EdgePtr(Option<usize>);
+pub enum ElemID {
+    Vert(VertID),
+    Edge(EdgeID),
+    Face(FaceID),
+}
 
-#[derive(Default, Clone, Debug, Eq, Hash, PartialEq)]
-struct VrtxPtr(Option<usize>);
+impl From<VertID> for ElemID {
+    fn from(id: VertID) -> Self {
+        ElemID::Vert(id)
+    }
+}
 
-#[derive(Default, Clone, Debug)]
-struct FacePtr(Option<usize>);
+impl From<EdgeID> for ElemID {
+    fn from(id: EdgeID) -> Self {
+        ElemID::Edge(id)
+    }
+}
 
-#[derive(Default, Clone, Debug)]
+impl From<FaceID> for ElemID {
+    fn from(id: FaceID) -> Self {
+        ElemID::Face(id)
+    }
+}
+
+pub enum MeshData<V, E, F> {
+    Vert(V),
+    Edge(E),
+    Face(F),
+}
+
+pub trait HasPosition {
+    fn position(&self) -> Vec3;
+    fn set_position(&mut self, position: Vec3);
+}
+
+pub trait HasNormal {
+    fn normal(&self) -> Vec3;
+    fn set_normal(&mut self, normal: Vec3);
+}
+
+#[derive(Default, Clone, Debug, Serialize, Deserialize)]
 pub struct Edge<T> {
-    pub root: VrtxPtr,
-    pub face: FacePtr,
-    pub next: EdgePtr,
-    pub twin: EdgePtr,
+    root: Option<VertID>,
+    face: Option<FaceID>,
+    next: Option<EdgeID>,
+    twin: Option<EdgeID>,
 
-    pub aux: T,
+    aux: Option<T>,
 }
 
-impl<T: std::default::Default> Edge<T> {
-    pub fn new(root: VrtxPtr) -> Self {
-        Self {
-            root,
-            face: FacePtr(None),
-            next: EdgePtr(None),
-            twin: EdgePtr(None),
-            aux: Default::default(),
-        }
-    }
+#[derive(Default, Clone, Debug, Serialize, Deserialize)]
+pub struct Vert<T> {
+    rep: Option<EdgeID>,
+
+    aux: Option<T>,
 }
 
-#[derive(Default, Clone, Debug)]
-pub struct Vrtx<T> {
-    pub rep: EdgePtr,
-    pub pos: Vec3,
-
-    pub aux: T,
-}
-
-impl<T: std::default::Default> Vrtx<T> {
-    pub fn new(pos: Vec3) -> Self {
-        Self {
-            rep: EdgePtr(None),
-            pos,
-            aux: Default::default(),
-        }
-    }
-}
-
-#[derive(Default, Clone, Debug)]
+#[derive(Default, Clone, Debug, Serialize, Deserialize)]
 pub struct Face<T> {
-    pub rep: EdgePtr,
+    rep: Option<EdgeID>,
 
-    pub aux: T,
+    aux: Option<T>,
 }
 
-// The doubly connected edge list (DCEL or Doconeli), also known as half-edge data structure,
+// The doubly connected edge list (DCEL or Douconel), also known as half-edge data structure,
 // is a data structure to represent an embedding of a planar graph in the plane, and polytopes in 3D.
-#[derive(Default, Clone, Debug)]
-pub struct Doconeli<E, V, F> {
-    edges: Memory<Edge<E>>,
-    vrtxs: Memory<Vrtx<V>>,
-    faces: Memory<Face<F>>,
-
-    _boo: PhantomData<Edge<E>>,
+#[derive(Default, Clone, Debug, Serialize, Deserialize)]
+pub struct Douconel<V, E, F> {
+    verts: SlotMap<VertID, Vert<V>>,
+    edges: SlotMap<EdgeID, Edge<E>>,
+    faces: SlotMap<FaceID, Face<F>>,
 }
 
 impl<
-        EdgeData: Default + Clone + Debug,
-        VrtxData: Default + Clone + Debug,
-        FaceData: Default + Clone + Debug,
-    > Doconeli<EdgeData, VrtxData, FaceData>
+        V: Default + Clone + Debug + Serialize + for<'a> Deserialize<'a>,
+        E: Default + Clone + Debug + Serialize + for<'a> Deserialize<'a>,
+        F: Default + Clone + Debug + Serialize + for<'a> Deserialize<'a>,
+    > Douconel<V, E, F>
 {
-    // Initialize an empty DCEL with `n` vertices and `m` faces.
-    // pub fn new(n: usize, m: usize) -> Self {
-    //     Self {
-    //         edges: vec![],
-    //         faces: vec![Face::default(); m],
-    //         vrtxs: vec![Vrtx::default(); n],
-    //         _boo: Default::default(),
-    //     }
-    // }
-
-    // Initialize an empty DCEL.
     pub fn new() -> Self {
         Self {
-            edges: Memory::new(),
-            faces: Memory::new(),
-            vrtxs: Memory::new(),
-            _boo: Default::default(),
+            verts: SlotMap::with_key(),
+            edges: SlotMap::with_key(),
+            faces: SlotMap::with_key(),
         }
     }
 
-    pub fn from_vertices_and_faces(
-        vertices: Vec<Vec3>,
+    pub fn from_faces(
         faces: Vec<Vec<usize>>,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> Result<(Self, HashMap<usize, VertID>, HashMap<usize, FaceID>), Box<dyn Error>> {
         let mut mesh = Self::new();
 
-        // https://cs.stackexchange.com/questions/2450/how-do-i-construct-a-doubly-connected-edge-list-given-a-set-of-line-segments
+        // 1. Create the vertices.
+        //      trivial; get all unique input vertices (from the faces), and create a vertex for each of them
+        //
+        // 2. Create the faces with its (half)edges.
+        //      each face has edges defined by a sequence of vertices, example:
+        //          face = [v0, v1, v2]
+        //          then we create three edges = [(v0, v1), (v1, v2), (v2, v0)]
+        //                v0
+        //                *
+        //               ^ \
+        //              /   \ e0
+        //          e2 /     \
+        //            /       v
+        //        v2 * < - - - * v1
+        //                e1
+        //
+        // 3. Assign representatives to vertices.
+        //      trivial; just assign some edge that has this vertex as its root (just requires some bookkeeping)
+        //      return error if no such edge exists
+        //
+        // 4. Assign twins.
+        //      trivial; just assign THE edge that has the same endpoints, but swapped (just requires some bookkeeping)
+        //      return error if no such edge exists
+        //
 
+        // 1. Create the vertices.
         // Need mapping between original indices, and new pointers
-        let vertex_pointers = vec![];
-        // Need mapping between vertices and edges
-        let mut v_to_e = HashMap::<VrtxPtr, Vec<EdgePtr>>::new();
+        let mut vertex_pointers = HashMap::<usize, VertID>::new();
+        let mut face_pointers = HashMap::<usize, FaceID>::new();
 
-        // 1. For each endpoint, create a vertex.
-        for (vertex_id, vertex_data) in vertices.into_iter().enumerate() {
-            let index = VrtxPtr(Some(mesh.vrtxs.alloc(Vrtx::new(vertex_data))));
-            vertex_pointers.push(index);
-        }
-
-        // 2. For each edge, create two half-edges, and assign their root vertices and twins.
-        let edges = faces
+        let vertices = faces
             .iter()
-            .map(|face| {
-                let mut conc = face;
-                conc.push(face[0]);
-
-                conc.windows(2)
-                    .map(|pair| (vertex_pointers[pair[0]], vertex_pointers[pair[1]]))
-            })
             .flatten()
+            .unique()
+            .map(|&inp_vert_id| inp_vert_id)
             .collect_vec();
 
-        for (v_a, v_b) in edges {
-            // Assign root vertices
-            let edge = mesh.edges.alloc(Edge::new(v_a));
-            let edge_twin = mesh.edges.alloc(Edge::new(v_b));
-
-            let edge_pointer = EdgePtr(Some(edge));
-            let edge_twin_pointer = EdgePtr(Some(edge_twin));
-
-            // Assign twins
-            // should have function to add, and remove.. etc. DO NOT USE EDGES DIRECTLY :/
-            mesh.edges.deref_mut(edge).twin = edge_twin_pointer;
-            mesh.edges.deref_mut(edge_twin).twin = edge_pointer;
-
-            // Add to v_to_e
-            v_to_e
-                .entry(v_a)
-                .or_insert_with(Vec::new)
-                .push(edge_pointer);
-
-            v_to_e
-                .entry(v_b)
-                .or_insert_with(Vec::new)
-                .push(edge_twin_pointer);
+        for inp_vert_id in vertices {
+            let vert_id = mesh.verts.insert(Vert::default());
+            vertex_pointers.insert(inp_vert_id, vert_id);
         }
 
-        // 3. For each endpoint, sort the half-edges whose tail vertex is that endpoint in clockwise order.
-        for vertex in mesh.vrtxs.items() {}
+        // 2. Create the faces with its (half)edges.
+        // Need mapping between vertices and edges
+        let mut root_to_edges = HashMap::<VertID, Vec<EdgeID>>::new();
+        let mut endpoints_to_edges = HashMap::<(VertID, VertID), Vec<EdgeID>>::new();
+        for (inp_face_id, inp_face_edges) in faces.iter().enumerate() {
+            let face_id = mesh.faces.insert(Face::default());
+            face_pointers.insert(inp_face_id, face_id);
 
-        for (face_id, face) in faces.iter().enumerate() {
-            // TODO: should instantiate this edge first, then grab its id, then use this id.
-            let e0_id = mesh.edges.len();
-            mesh.faces[face_id] = Face {
-                rep: Some(EdgeID(e0_id)),
-                ..default()
+            let mut conc = inp_face_edges.clone();
+            conc.push(inp_face_edges[0]); // Re-append the first to loop back
+
+            let edges = conc
+                .iter()
+                .tuple_windows()
+                .map(|(inp_start_vertex, inp_end_vertex)| {
+                    (
+                        vertex_pointers[inp_start_vertex],
+                        vertex_pointers[inp_end_vertex],
+                    )
+                })
+                .collect_vec();
+
+            let mut edge_ids = Vec::with_capacity(edges.len());
+
+            for (start_vertex, end_vertex) in edges {
+                let edge_id = mesh.edges.insert(Edge::default());
+
+                root_to_edges
+                    .entry(start_vertex)
+                    .or_insert(Vec::new())
+                    .push(edge_id);
+
+                endpoints_to_edges
+                    .entry((start_vertex, end_vertex))
+                    .or_insert(Vec::new())
+                    .push(edge_id);
+
+                if let Some(edge) = mesh.edges.get_mut(edge_id) {
+                    edge.root = Some(start_vertex);
+                    edge.face = Some(face_id);
+                } else {
+                    panic!("Edge {edge_id:?} does not exist in the mesh");
+                }
+
+                edge_ids.push(edge_id);
+            }
+
+            // Linking each edge to its next edge in the face
+            edge_ids.push(edge_ids[0]); // Re-append the first to loop back
+            for window in edge_ids.windows(2) {
+                if let [edge_a, edge_b] = *window {
+                    if let Some(edge) = mesh.edges.get_mut(edge_a) {
+                        edge.next = Some(edge_b);
+                    } else {
+                        bail!("Edge {edge_a:?} does not exist in the mesh");
+                    }
+                }
+            }
+
+            // Set the representative edge for the face
+            if let Some(face) = mesh.faces.get_mut(face_id) {
+                face.rep = edge_ids.first().copied();
+            } else {
+                bail!("Face {face_id:?} does not exist in the mesh");
+            }
+        }
+
+        // 3. Assign representatives to vertices.
+        for (vert_id, edges) in root_to_edges {
+            if let Some(vert) = mesh.verts.get_mut(vert_id) {
+                vert.rep = Some(edges[0]);
+            } else {
+                bail!("Vertex {vert_id:?} does not exist in the mesh");
+            }
+        }
+
+        // 4. Assign twins.
+        for (&(vert_a, vert_b), edge_ids) in &endpoints_to_edges {
+            // Check for the expected single edge id
+            if edge_ids.len() != 1 {
+                bail!(
+                    "Expected 1 edge_id for ({:?}, {:?}), found {}",
+                    vert_a,
+                    vert_b,
+                    edge_ids.len()
+                );
+            }
+            let edge_id = edge_ids[0];
+
+            // Retrieve the twin edge
+            let twin_id = match endpoints_to_edges.get(&(vert_b, vert_a)) {
+                Some(ids) => {
+                    if ids.len() != 1 {
+                        bail!(
+                            "Expected 1 twin_id for ({:?}, {:?}), found {}",
+                            vert_b,
+                            vert_a,
+                            ids.len()
+                        );
+                    }
+                    ids[0]
+                }
+                None => bail!("Twin edge for ({:?}, {:?}) not found", vert_a, vert_b),
             };
 
-            for (i, &vertex_id) in face.iter().enumerate() {
-                mesh.edges.push(Edge {
-                    root: VrtxID(vertex_id),
-                    face: FaceID(face_id),
-                    next: Some(EdgeID(e0_id + ((i + 1) % face.len()))),
-                    twin: None,
-                    ..default()
-                });
+            // Assign twins
+            if let Some(edge) = mesh.edges.get_mut(edge_id) {
+                edge.twin = Some(twin_id);
+            } else {
+                bail!("Edge {edge_id:?} does not exist in the mesh");
+            }
 
-                if mesh.vrtxs[vertex_id].rep.is_none() {
-                    mesh.vrtxs[vertex_id] = Vrtx {
-                        rep: Some(EdgeID(e0_id + i)),
-                        position: Vec3::new(
-                            vertices[vertex_id][0],
-                            vertices[vertex_id][1],
-                            vertices[vertex_id][2],
-                        ),
-                        ..default()
-                    };
+            if let Some(twin) = mesh.edges.get_mut(twin_id) {
+                twin.twin = Some(edge_id);
+            } else {
+                bail!("Twin edge {twin_id:?} does not exist in the mesh");
+            }
+        }
+
+        println!(
+            "Constructed valid douconel: |V|={}, |hE|={}, |F|={}, ",
+            mesh.verts.len(),
+            mesh.edges.len(),
+            mesh.faces.len()
+        );
+
+        Ok((mesh, vertex_pointers, face_pointers))
+    }
+
+    // iterate through all elements, and assure that no None values exist
+    pub fn verify_correctness(&self) -> Result<(), Box<dyn Error>> {
+        for (edge_id, edge) in &self.edges {
+            if edge.root.is_none() {
+                bail!("Edge {edge_id:?} has no root");
+            }
+            if edge.face.is_none() {
+                bail!("Edge {edge_id:?} has no face");
+            }
+            if edge.next.is_none() {
+                bail!("Edge {edge_id:?} has no next");
+            }
+            if edge.twin.is_none() {
+                bail!("Edge {edge_id:?} has no twin");
+            }
+        }
+        for (vert_id, vert) in &self.verts {
+            if vert.rep.is_none() {
+                bail!("Vert {vert_id:?} has no rep");
+            }
+        }
+        for (face_id, face) in &self.faces {
+            if face.rep.is_none() {
+                bail!("Face {face_id:?} has no rep");
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn verify_invariants(&self) -> Result<(), Box<dyn Error>> {
+        // this->twin->twin == this
+        for edge_id in self.edges.keys() {
+            if let Some(twin_id) = self.twin(edge_id) {
+                if let Some(twin_twin_id) = self.twin(twin_id) {
+                    if twin_twin_id != edge_id {
+                        bail!("Edge {edge_id:?}: [this->twin->twin == this] violated");
+                    }
                 }
             }
         }
 
-        let mut vertex_pair_to_edge_map = HashMap::new();
-        for edge_id in 0..mesh.edges.len() {
-            let v_a = mesh.get_root_of_edge(edge_id);
-            let v_b = mesh.get_root_of_edge(mesh.get_next_of_edge(edge_id));
-            if let Some(&dupl_id) = vertex_pair_to_edge_map.get(&(v_a, v_b)) {
-                bail!("NOT MANIFOLD: Duplicate vertex pair ({v_a}, {v_b}) for both edge {dupl_id} and edge {edge_id}.")
-            }
-            vertex_pair_to_edge_map.insert((v_a, v_b), edge_id);
-        }
-
-        for (&(v_a, v_b), &e_ab) in &vertex_pair_to_edge_map {
-            if let Some(&e_ba) = vertex_pair_to_edge_map.get(&(v_b, v_a)) {
-                match mesh.edges[e_ab].twin {
-                    Some(cur) => {
-                        bail!("NOT MANIFOLD: Edge {e_ab} has two twins ({cur:?}, {e_ba}).")
+        // this->twin->next->root == this->root
+        for edge_id in self.edges.keys() {
+            if let Some(root_id) = self.root(edge_id) {
+                if let Some(twin_id) = self.twin(edge_id) {
+                    if let Some(twin_next_id) = self.next(twin_id) {
+                        if let Some(twin_next_root_id) = self.root(twin_next_id) {
+                            if twin_next_root_id != root_id {
+                                bail!("Edge {edge_id:?}: [this->twin->next->root == this->root] violated");
+                            }
+                        }
                     }
-                    None => mesh.edges[e_ab].twin = Some(EdgeID(e_ba)),
-                };
-            } else {
-                bail!("NOT WATERTIGHT: Edge {e_ab} has no twin.");
+                }
             }
         }
 
-        Ok(mesh)
+        // this->next->face == this->face
+        for edge_id in self.edges.keys() {
+            if let Some(face_id) = self.face(edge_id) {
+                if let Some(next_id) = self.next(edge_id) {
+                    if let Some(next_face_id) = self.face(next_id) {
+                        if next_face_id != face_id {
+                            bail!("Edge {edge_id:?}: [this->next->face == this->face] violated");
+                        }
+                    }
+                }
+            }
+        }
+
+        // this->next->...->next == this
+        let max_face_size = 100;
+        'outer: for edge_id in self.edges.keys() {
+            let mut next_id = edge_id;
+            for _ in 0..max_face_size {
+                if let Some(next_next_id) = self.next(next_id) {
+                    if next_next_id == edge_id {
+                        continue 'outer;
+                    }
+                    next_id = next_next_id;
+                }
+            }
+            bail!("Edge {edge_id:?}: [this->next->...->next == this] violated");
+        }
+
+        Ok(())
     }
 
-    // // Read an STL file from `path`, and construct a DCEL.
-    // pub fn from_stl(path: &str) -> Result<Self, Box<dyn Error>> {
-    //     let stl = stl_io::read_stl(&mut OpenOptions::new().read(true).open(path)?)?;
+    // Returns the "representative" edge
+    pub fn rep(&self, id: ElemID) -> Option<EdgeID> {
+        match id {
+            ElemID::Vert(id) => self.verts.get(id)?.rep,
+            ElemID::Face(id) => self.faces.get(id)?.rep,
+            _ => None,
+        }
+    }
 
-    //     let vertices = stl
-    //         .vertices
-    //         .into_iter()
-    //         .map(|v| Vec3::new(v[0], v[1], v[2]))
-    //         .collect_vec();
+    // Returns the "representative" edge
+    pub fn aux(&self, id: ElemID) -> Option<MeshData<V, E, F>> {
+        match id {
+            ElemID::Vert(id) => Some(MeshData::Vert(self.verts.get(id)?.clone().aux?)),
+            ElemID::Face(id) => Some(MeshData::Face(self.faces.get(id)?.clone().aux?)),
+            ElemID::Edge(id) => Some(MeshData::Edge(self.edges.get(id)?.clone().aux?)),
+        }
+    }
 
-    //     let faces = stl
-    //         .faces
-    //         .into_iter()
-    //         .map(|f| f.vertices.to_vec())
-    //         .collect_vec();
+    // Returns the root vertex of the given edge.
+    pub fn root(&self, id: EdgeID) -> Option<VertID> {
+        self.edges.get(id)?.root
+    }
 
-    //     Self::from_vertices_and_faces(&vertices, &faces)
-    // }
+    // Returns the twin edge of the given edge.
+    pub fn twin(&self, id: EdgeID) -> Option<EdgeID> {
+        self.edges.get(id)?.twin
+    }
 
-    // // Read an OBJ file from `path`, and construct a DCEL.
-    // pub fn from_obj(path: &str) -> Result<Self, Box<dyn Error>> {
-    //     let obj = obj::Obj::load(path)?;
+    // Returns the next edge of the given edge.
+    pub fn next(&self, id: EdgeID) -> Option<EdgeID> {
+        self.edges.get(id)?.next
+    }
 
-    //     let vertices = obj
-    //         .data
-    //         .position
-    //         .into_iter()
-    //         .map(|p| Vec3::from(p))
-    //         .collect_vec();
+    // Returns the face of the given edge.
+    pub fn face(&self, id: EdgeID) -> Option<FaceID> {
+        self.edges.get(id)?.face
+    }
 
-    //     let faces = obj
-    //         .data
-    //         .objects
-    //         .into_iter()
-    //         .map(|o| o.groups.into_iter().map(|g| g.polys).flatten())
-    //         .flatten()
-    //         .map(|poly| poly.0.into_iter().map(|index| index.0).collect_vec())
-    //         .collect_vec();
+    // Returns the vertices of a given element.
+    pub fn vertices(&self, id: ElemID) -> Option<Vec<VertID>> {
+        match id {
+            ElemID::Edge(id) => Some(self.endpoints(id)?),
+            ElemID::Face(id) => Some(self.vertices_of_face(id)?),
+            _ => None,
+        }
+    }
 
-    //     Self::from_vertices_and_faces(&vertices, &faces)
-    // }
+    // Returns the start and end vertex IDs of the given edge.
+    pub fn endpoints(&self, id: EdgeID) -> Option<Vec<VertID>> {
+        Some(vec![self.root(id)?, self.root(self.twin(id)?)?])
+    }
+
+    // Returns the vertices of a given face.
+    pub fn vertices_of_face(&self, id: FaceID) -> Option<Vec<VertID>> {
+        let mut vertices = Vec::new();
+        for edge_id in self.edges(id.into())? {
+            vertices.push(self.root(edge_id)?);
+        }
+        Some(vertices)
+    }
+
+    // Returns the edges around a given element.
+    pub fn edges(&self, id: ElemID) -> Option<Vec<EdgeID>> {
+        match id {
+            ElemID::Vert(id) => self.edges_of_vert(id),
+            ElemID::Face(id) => self.edges_of_face(id),
+            _ => None,
+        }
+    }
+
+    // Returns the edges around a given vertex.
+    pub fn edges_of_vert(&self, id: VertID) -> Option<Vec<EdgeID>> {
+        let mut edges = vec![self.rep(ElemID::Vert(id))?];
+        loop {
+            let twin = self.twin(*edges.last().unwrap())?;
+            let next = self.next(twin)?;
+            if edges.contains(&next) {
+                return Some(edges);
+            }
+            edges.push(next);
+        }
+    }
+
+    // Returns the edges around a given face.
+    pub fn edges_of_face(&self, id: FaceID) -> Option<Vec<EdgeID>> {
+        let mut edges = vec![self.rep(ElemID::Face(id))?];
+        loop {
+            let next = self.next(*edges.last().unwrap())?;
+            if edges.contains(&next) {
+                return Some(edges);
+            }
+            edges.push(next);
+        }
+    }
+
+    // Returns the faces around a given element.
+    pub fn faces(&self, id: ElemID) -> Option<Vec<FaceID>> {
+        match id {
+            ElemID::Vert(id) => Some(self.faces_of_vert(id)?),
+            ElemID::Edge(id) => Some(self.faces_of_edge(id)?),
+            _ => None,
+        }
+    }
+
+    // Returns the faces around a given vert.
+    pub fn faces_of_vert(&self, id: VertID) -> Option<Vec<FaceID>> {
+        let mut faces = Vec::new();
+        for edge_id in self.edges(id.into())? {
+            if let Some(face_id) = self.face(edge_id) {
+                faces.push(face_id);
+            }
+        }
+        Some(faces)
+    }
+
+    // Returns the faces around a given edge.
+    pub fn faces_of_edge(&self, id: EdgeID) -> Option<Vec<FaceID>> {
+        Some(vec![self.face(id)?, self.face(self.twin(id)?)?])
+    }
+
+    // Returns the edge between the two elements.
+    pub fn between(&self, id_a: ElemID, id_b: ElemID) -> Option<[EdgeID; 2]> {
+        match (id_a, id_b) {
+            (ElemID::Vert(id_a), ElemID::Vert(id_b)) => self.edge_between_verts(id_a, id_b),
+            (ElemID::Face(id_a), ElemID::Face(id_b)) => self.edge_between_faces(id_a, id_b),
+            _ => None,
+        }
+    }
+
+    // Returns the edge between the two vertices.
+    pub fn edge_between_verts(&self, id_a: VertID, id_b: VertID) -> Option<[EdgeID; 2]> {
+        let edges_a = self.edges_of_vert(id_a)?;
+        let edges_b = self.edges_of_vert(id_b)?;
+        for &edge_a_id in &edges_a {
+            for &edge_b_id in &edges_b {
+                if self.twin(edge_a_id)? == edge_b_id {
+                    return Some([edge_a_id, edge_b_id]);
+                }
+            }
+        }
+        None
+    }
+
+    // Returns the edge between the two faces.
+    pub fn edge_between_faces(&self, id_a: FaceID, id_b: FaceID) -> Option<[EdgeID; 2]> {
+        let edges_a = self.edges_of_face(id_a)?;
+        let edges_b = self.edges_of_face(id_b)?;
+        for &edge_a_id in &edges_a {
+            for &edge_b_id in &edges_b {
+                if self.twin(edge_a_id)? == edge_b_id {
+                    return Some([edge_a_id, edge_b_id]);
+                }
+            }
+        }
+        None
+    }
+
+    // Returns the neighbors of a given element.
+    pub fn neighbors(&self, id: ElemID) -> Option<Vec<ElemID>> {
+        match id {
+            ElemID::Vert(id) => Some(
+                self.neighbors_of_vert(id)?
+                    .into_iter()
+                    .map(|id| ElemID::Vert(id))
+                    .collect(),
+            ),
+            ElemID::Face(id) => Some(
+                self.neighbors_of_face(id)?
+                    .into_iter()
+                    .map(|id| ElemID::Face(id))
+                    .collect(),
+            ),
+            _ => None,
+        }
+    }
+
+    // Returns the neighbors of a given vertex.
+    pub fn neighbors_of_vert(&self, id: VertID) -> Option<Vec<VertID>> {
+        let mut neighbors = Vec::new();
+        for edge_id in self.edges(id.into())? {
+            neighbors.push(self.root(self.twin(edge_id)?)?);
+        }
+        Some(neighbors)
+    }
+
+    // Returns the neighbors of a given face.
+    pub fn neighbors_of_face(&self, id: FaceID) -> Option<Vec<FaceID>> {
+        let mut neighbors = Vec::new();
+        for edge_id in self.edges(id.into())? {
+            neighbors.push(self.face(self.twin(edge_id)?)?);
+        }
+        Some(neighbors)
+    }
+
+    // Returns the number of vertices in the mesh.
+    pub fn nr_verts(&self) -> usize {
+        self.verts.len()
+    }
+
+    // Returns the number of (half)edges in the mesh.
+    pub fn nr_edges(&self) -> usize {
+        self.edges.len()
+    }
+
+    // Returns the number of faces in the mesh.
+    pub fn nr_faces(&self) -> usize {
+        self.faces.len()
+    }
 }
 
-// #[derive(Default, Clone, Debug, Serialize, Deserialize)]
-// pub struct VertexAuxData {
-//     pub original_face_id: usize,
-//     pub ordering: Vec<(usize, usize)>,
-// }
+// Implement from_stl for Douconel with HasPosition on vertices and HasNormal on faces
+impl<
+        V: Default + Clone + Debug + Serialize + for<'a> Deserialize<'a> + HasPosition,
+        E: Default + Clone + Debug + Serialize + for<'a> Deserialize<'a>,
+        F: Default + Clone + Debug + Serialize + for<'a> Deserialize<'a> + HasNormal,
+    > Douconel<V, E, F>
+{
+    // Read an STL file from `path`, and construct a DCEL.
+    pub fn from_stl(path: &str) -> Result<Self, Box<dyn Error>> {
+        let stl = stl_io::read_stl(&mut OpenOptions::new().read(true).open(path)?)?;
 
-// #[derive(Default, Clone, Debug, Serialize, Deserialize)]
-// pub struct EdgeAuxData {
-//     pub label: Option<usize>,
-//     pub part_of_path: Option<usize>,
-//     pub edges_between: Option<Vec<usize>>,
-//     pub edges_between_endpoints: Option<(usize, usize)>,
-// }
+        let faces = stl.faces.iter().map(|f| f.vertices.to_vec()).collect_vec();
 
-// #[derive(Default, Clone, Debug, Serialize, Deserialize)]
-// pub struct FaceAuxData {
-//     pub color: Color,
-//     pub dual_position: Option<Vec3>,
-//     pub dual_normal: Option<Vec3>,
-//     pub original_face: Option<usize>,
-// }
+        if let Ok((mut douconel, vertex_map, face_map)) = Self::from_faces(faces) {
+            for (inp_vertex_id, inp_vertex_pos) in stl.vertices.iter().enumerate() {
+                let vert_id = vertex_map[&inp_vertex_id];
+                if let Some(vert) = douconel.verts.get_mut(vert_id) {
+                    if let Some(vert_data) = &mut vert.aux {
+                        vert_data.set_position(Vec3::new(
+                            inp_vertex_pos[0],
+                            inp_vertex_pos[1],
+                            inp_vertex_pos[2],
+                        ));
+                    }
+                }
+            }
+            for (inp_face_id, inp_face_normal) in stl.faces.iter().enumerate() {
+                let face_id = face_map[&inp_face_id];
+                if let Some(face) = douconel.faces.get_mut(face_id) {
+                    if let Some(face_data) = &mut face.aux {
+                        face_data.set_normal(Vec3::new(
+                            inp_face_normal.normal[0],
+                            inp_face_normal.normal[1],
+                            inp_face_normal.normal[2],
+                        ));
+                    }
+                }
+            }
+
+            Ok(douconel)
+        } else {
+            bail!("Failed to construct douconel");
+        }
+    }
+}
+
+// Implement helper functions for when vertices have a defined position
+impl<
+        V: Default + Clone + Debug + Serialize + for<'a> Deserialize<'a> + HasPosition,
+        E: Default + Clone + Debug + Serialize + for<'a> Deserialize<'a>,
+        F: Default + Clone + Debug + Serialize + for<'a> Deserialize<'a>,
+    > Douconel<V, E, F>
+{
+    // Get position of a given vertex.
+    pub fn position(&self, id: VertID) -> Option<Vec3> {
+        Some(self.verts.get(id)?.clone().aux?.position())
+    }
+
+    // Get centroid of a given face. Be careful with concave faces, the centroid might lay outside the face.
+    pub fn centroid(&self, face_id: FaceID) -> Option<Vec3> {
+        let mut centroid = Vec3::ZERO;
+        let mut count = 0;
+        for edge_id in self.edges(ElemID::Face(face_id))? {
+            centroid += self.position(self.root(edge_id)?)?;
+            count += 1;
+        }
+        Some(centroid / count as f32)
+    }
+
+    // Get vector of a given edge.
+    pub fn vector(&self, id: EdgeID) -> Option<Vec3> {
+        let ends = self.endpoints(id)?;
+        Some(self.position(ends[1])? - self.position(ends[0])?)
+    }
+
+    // Get length of a given edge.
+    pub fn length(&self, id: EdgeID) -> Option<f32> {
+        Some(self.vector(id)?.length())
+    }
+
+    // Get distance between two vertices.
+    pub fn distance(&self, v_a: VertID, v_b: VertID) -> Option<f32> {
+        Some(self.position(v_a)?.distance(self.position(v_b)?))
+    }
+
+    // Get angle between two edges.
+    pub fn angle(&self, e_a: EdgeID, e_b: EdgeID) -> Option<f32> {
+        Some(self.vector(e_a)?.angle_between(self.vector(e_b)?))
+    }
+
+    // Get angular defect of a vertex (2pi minus the sum of all the angles at the vertex).
+    pub fn defect(&self, id: VertID) -> Option<f32> {
+        let mut sum_of_angles = 0.;
+        let outgoing_edges = self.edges(ElemID::Vert(id))?;
+        for outgoing_edge_id in outgoing_edges {
+            let incoming_edge_id = self.twin(outgoing_edge_id)?;
+            let next_edge_id = self.next(incoming_edge_id)?;
+            let angle = self.angle(outgoing_edge_id, next_edge_id)?;
+            sum_of_angles += angle;
+        }
+        Some(2. * std::f32::consts::PI - sum_of_angles)
+    }
+}
