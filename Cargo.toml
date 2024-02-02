@@ -5,9 +5,11 @@ edition = "2021"
 
 [dependencies]
 itertools = "0.11.0"
-serde = "1.0.193"
-glam = { version = "0.25.0", features = ["serde"] }
 simple-error = "0.3.0"
+rayon = "1.8.1"
+rand = "0.8.5"
 
 slotmap = { version = "1.0.7", features = ["serde"] }
 stl_io = "0.7.0"
+bevy = "0.11.2"
+petgraph = "0.6.4"

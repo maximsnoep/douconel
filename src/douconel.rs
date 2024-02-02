@@ -1,13 +1,9 @@
-use glam::Vec3;
 use itertools::Itertools;
-use serde::Deserialize;
-use serde::Serialize;
 use simple_error::bail;
 use slotmap::SlotMap;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::Debug;
-use std::fs::OpenOptions;
 
 slotmap::new_key_type! {
     pub struct VertID;
@@ -39,60 +35,41 @@ impl From<FaceID> for ElemID {
     }
 }
 
-pub enum MeshData<V, E, F> {
-    Vert(V),
-    Edge(E),
-    Face(F),
-}
-
-pub trait HasPosition {
-    fn position(&self) -> Vec3;
-    fn set_position(&mut self, position: Vec3);
-}
-
-pub trait HasNormal {
-    fn normal(&self) -> Vec3;
-    fn set_normal(&mut self, normal: Vec3);
-}
-
-#[derive(Default, Clone, Debug, Serialize, Deserialize)]
+#[derive(Default, Copy, Clone)]
 pub struct Edge<T> {
     root: Option<VertID>,
     face: Option<FaceID>,
     next: Option<EdgeID>,
     twin: Option<EdgeID>,
 
-    aux: Option<T>,
+    pub aux: T,
 }
 
-#[derive(Default, Clone, Debug, Serialize, Deserialize)]
+#[derive(Default, Copy, Clone)]
 pub struct Vert<T> {
     rep: Option<EdgeID>,
 
-    aux: Option<T>,
+    pub aux: T,
 }
 
-#[derive(Default, Clone, Debug, Serialize, Deserialize)]
+#[derive(Default, Copy, Clone)]
 pub struct Face<T> {
     rep: Option<EdgeID>,
 
-    aux: Option<T>,
+    pub aux: T,
 }
 
 // The doubly connected edge list (DCEL or Douconel), also known as half-edge data structure,
 // is a data structure to represent an embedding of a planar graph in the plane, and polytopes in 3D.
-#[derive(Default, Clone, Debug, Serialize, Deserialize)]
+#[derive(Default, Clone)]
 pub struct Douconel<V, E, F> {
-    verts: SlotMap<VertID, Vert<V>>,
-    edges: SlotMap<EdgeID, Edge<E>>,
-    faces: SlotMap<FaceID, Face<F>>,
+    pub verts: SlotMap<VertID, Vert<V>>,
+    pub edges: SlotMap<EdgeID, Edge<E>>,
+    pub faces: SlotMap<FaceID, Face<F>>,
 }
 
-impl<
-        V: Default + Clone + Debug + Serialize + for<'a> Deserialize<'a>,
-        E: Default + Clone + Debug + Serialize + for<'a> Deserialize<'a>,
-        F: Default + Clone + Debug + Serialize + for<'a> Deserialize<'a>,
-    > Douconel<V, E, F>
+impl<V: Default + Copy + Clone, E: Default + Copy + Clone, F: Default + Copy + Clone>
+    Douconel<V, E, F>
 {
     pub fn new() -> Self {
         Self {
@@ -375,15 +352,6 @@ impl<
         }
     }
 
-    // Returns the "representative" edge
-    pub fn aux(&self, id: ElemID) -> Option<MeshData<V, E, F>> {
-        match id {
-            ElemID::Vert(id) => Some(MeshData::Vert(self.verts.get(id)?.clone().aux?)),
-            ElemID::Face(id) => Some(MeshData::Face(self.faces.get(id)?.clone().aux?)),
-            ElemID::Edge(id) => Some(MeshData::Edge(self.edges.get(id)?.clone().aux?)),
-        }
-    }
-
     // Returns the root vertex of the given edge.
     pub fn root(&self, id: EdgeID) -> Option<VertID> {
         self.edges.get(id)?.root
@@ -573,109 +541,5 @@ impl<
     // Returns the number of faces in the mesh.
     pub fn nr_faces(&self) -> usize {
         self.faces.len()
-    }
-}
-
-// Implement from_stl for Douconel with HasPosition on vertices and HasNormal on faces
-impl<
-        V: Default + Clone + Debug + Serialize + for<'a> Deserialize<'a> + HasPosition,
-        E: Default + Clone + Debug + Serialize + for<'a> Deserialize<'a>,
-        F: Default + Clone + Debug + Serialize + for<'a> Deserialize<'a> + HasNormal,
-    > Douconel<V, E, F>
-{
-    // Read an STL file from `path`, and construct a DCEL.
-    pub fn from_stl(path: &str) -> Result<Self, Box<dyn Error>> {
-        let stl = stl_io::read_stl(&mut OpenOptions::new().read(true).open(path)?)?;
-
-        let faces = stl.faces.iter().map(|f| f.vertices.to_vec()).collect_vec();
-
-        if let Ok((mut douconel, vertex_map, face_map)) = Self::from_faces(faces) {
-            for (inp_vertex_id, inp_vertex_pos) in stl.vertices.iter().enumerate() {
-                let vert_id = vertex_map[&inp_vertex_id];
-                if let Some(vert) = douconel.verts.get_mut(vert_id) {
-                    if let Some(vert_data) = &mut vert.aux {
-                        vert_data.set_position(Vec3::new(
-                            inp_vertex_pos[0],
-                            inp_vertex_pos[1],
-                            inp_vertex_pos[2],
-                        ));
-                    }
-                }
-            }
-            for (inp_face_id, inp_face_normal) in stl.faces.iter().enumerate() {
-                let face_id = face_map[&inp_face_id];
-                if let Some(face) = douconel.faces.get_mut(face_id) {
-                    if let Some(face_data) = &mut face.aux {
-                        face_data.set_normal(Vec3::new(
-                            inp_face_normal.normal[0],
-                            inp_face_normal.normal[1],
-                            inp_face_normal.normal[2],
-                        ));
-                    }
-                }
-            }
-
-            Ok(douconel)
-        } else {
-            bail!("Failed to construct douconel");
-        }
-    }
-}
-
-// Implement helper functions for when vertices have a defined position
-impl<
-        V: Default + Clone + Debug + Serialize + for<'a> Deserialize<'a> + HasPosition,
-        E: Default + Clone + Debug + Serialize + for<'a> Deserialize<'a>,
-        F: Default + Clone + Debug + Serialize + for<'a> Deserialize<'a>,
-    > Douconel<V, E, F>
-{
-    // Get position of a given vertex.
-    pub fn position(&self, id: VertID) -> Option<Vec3> {
-        Some(self.verts.get(id)?.clone().aux?.position())
-    }
-
-    // Get centroid of a given face. Be careful with concave faces, the centroid might lay outside the face.
-    pub fn centroid(&self, face_id: FaceID) -> Option<Vec3> {
-        let mut centroid = Vec3::ZERO;
-        let mut count = 0;
-        for edge_id in self.edges(ElemID::Face(face_id))? {
-            centroid += self.position(self.root(edge_id)?)?;
-            count += 1;
-        }
-        Some(centroid / count as f32)
-    }
-
-    // Get vector of a given edge.
-    pub fn vector(&self, id: EdgeID) -> Option<Vec3> {
-        let ends = self.endpoints(id)?;
-        Some(self.position(ends[1])? - self.position(ends[0])?)
-    }
-
-    // Get length of a given edge.
-    pub fn length(&self, id: EdgeID) -> Option<f32> {
-        Some(self.vector(id)?.length())
-    }
-
-    // Get distance between two vertices.
-    pub fn distance(&self, v_a: VertID, v_b: VertID) -> Option<f32> {
-        Some(self.position(v_a)?.distance(self.position(v_b)?))
-    }
-
-    // Get angle between two edges.
-    pub fn angle(&self, e_a: EdgeID, e_b: EdgeID) -> Option<f32> {
-        Some(self.vector(e_a)?.angle_between(self.vector(e_b)?))
-    }
-
-    // Get angular defect of a vertex (2pi minus the sum of all the angles at the vertex).
-    pub fn defect(&self, id: VertID) -> Option<f32> {
-        let mut sum_of_angles = 0.;
-        let outgoing_edges = self.edges(ElemID::Vert(id))?;
-        for outgoing_edge_id in outgoing_edges {
-            let incoming_edge_id = self.twin(outgoing_edge_id)?;
-            let next_edge_id = self.next(incoming_edge_id)?;
-            let angle = self.angle(outgoing_edge_id, next_edge_id)?;
-            sum_of_angles += angle;
-        }
-        Some(2. * std::f32::consts::PI - sum_of_angles)
     }
 }

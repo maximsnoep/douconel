@@ -1,11 +1,58 @@
 pub mod douconel;
+pub mod douconel_extended;
+mod utils;
 
 #[cfg(test)]
 mod tests {
 
-    use glam::Vec3;
-    use serde::{Deserialize, Serialize};
-    use crate::douconel::{Douconel, HasNormal, HasPosition};
+    use crate::{
+        douconel::Douconel,
+        douconel_extended::{HasColor, HasNormal, HasPosition},
+    };
+    use bevy::prelude::*;
+    use itertools::Itertools;
+    use petgraph::{algo::astar, visit::EdgeRef};
+    use rand::seq::SliceRandom;
+    use rayon::iter::{IntoParallelIterator, ParallelIterator};
+
+    #[derive(Default, Copy, Clone)]
+    struct VertData {
+        position: Vec3,
+    }
+
+    impl HasPosition for VertData {
+        fn position(&self) -> Vec3 {
+            self.position
+        }
+        fn set_position(&mut self, position: Vec3) {
+            self.position = position;
+        }
+    }
+
+    #[derive(Default, Copy, Clone)]
+    struct FaceData {
+        normal: Vec3,
+        color: Color,
+    }
+
+    impl HasNormal for FaceData {
+        fn normal(&self) -> Vec3 {
+            self.normal
+        }
+        fn set_normal(&mut self, normal: Vec3) {
+            self.normal = normal;
+        }
+    }
+
+    impl HasColor for FaceData {
+        fn color(&self) -> Color {
+            self.color
+        }
+
+        fn set_color(&mut self, color: Color) {
+            self.color = color;
+        }
+    }
 
     #[test]
     fn from_manual() {
@@ -19,40 +66,15 @@ mod tests {
 
             assert!(douconel.verify_correctness().is_ok());
             assert!(douconel.verify_invariants().is_ok());
+
+            for face_id in douconel.faces.keys() {
+                assert!(douconel.vertices_of_face(face_id).unwrap().len() == 3);
+            }
         }
     }
 
     #[test]
     fn from_blub_stl() {
-
-        #[derive(Default, Clone, Debug, Serialize, Deserialize)]
-        struct VertData {
-            position: Vec3,
-        }
-
-        impl HasPosition for VertData {
-            fn position(&self) -> Vec3 {
-                self.position
-            }
-            fn set_position(&mut self, position: Vec3) {
-                self.position = position;
-            }
-        }
-
-        #[derive(Default, Clone, Debug, Serialize, Deserialize)]
-        struct FaceData {
-            normal: Vec3,
-        }
-
-        impl HasNormal for FaceData {
-            fn normal(&self) -> Vec3 {
-                self.normal
-            }
-            fn set_normal(&mut self, normal: Vec3) {
-                self.normal = normal;
-            }
-        }
-
         let douconel = Douconel::<VertData, (), FaceData>::from_stl("assets/blub001k.stl");
         assert!(douconel.is_ok());
         if let Ok(douconel) = douconel {
@@ -62,40 +84,39 @@ mod tests {
 
             assert!(douconel.verify_correctness().is_ok());
             assert!(douconel.verify_invariants().is_ok());
+
+            for face_id in douconel.faces.keys() {
+                assert!(douconel.vertices_of_face(face_id).unwrap().len() == 3);
+            }
+
+            let g = douconel.petgraph().unwrap();
+
+            assert!(g.node_count() == 945);
+            assert!(g.edge_count() == 2829 * 2);
+
+            let verts = douconel.verts.keys().collect_vec();
+
+            (0..100000).into_par_iter().for_each(|_| {
+                let mut rng = rand::thread_rng();
+                let (v_a, v_b) = verts
+                    .choose_multiple(&mut rng, 2)
+                    .copied()
+                    .collect_tuple()
+                    .unwrap();
+
+                let path = astar(
+                    &g,
+                    v_a,
+                    |finish| finish == v_b,
+                    |e| *e.weight(),
+                    |v_id| douconel.distance(v_b, v_id).unwrap(),
+                );
+            });
         }
     }
 
     #[test]
     fn from_nefertiti_stl() {
-
-        #[derive(Default, Clone, Debug, Serialize, Deserialize)]
-        struct VertData {
-            position: Vec3,
-        }
-
-        impl HasPosition for VertData {
-            fn position(&self) -> Vec3 {
-                self.position
-            }
-            fn set_position(&mut self, position: Vec3) {
-                self.position = position;
-            }
-        }
-
-        #[derive(Default, Clone, Debug, Serialize, Deserialize)]
-        struct FaceData {
-            normal: Vec3,
-        }
-
-        impl HasNormal for FaceData {
-            fn normal(&self) -> Vec3 {
-                self.normal
-            }
-            fn set_normal(&mut self, normal: Vec3) {
-                self.normal = normal;
-            }
-        }
-
         let douconel = Douconel::<VertData, (), FaceData>::from_stl("assets/nefertiti099k.stl");
         assert!(douconel.is_ok());
         if let Ok(douconel) = douconel {
@@ -105,8 +126,34 @@ mod tests {
 
             assert!(douconel.verify_correctness().is_ok());
             assert!(douconel.verify_invariants().is_ok());
+
+            for face_id in douconel.faces.keys() {
+                assert!(douconel.vertices_of_face(face_id).unwrap().len() == 3);
+            }
+
+            let g = douconel.petgraph().unwrap();
+
+            assert!(g.node_count() == 49971);
+            assert!(g.edge_count() == 149907 * 2);
+
+            let verts = douconel.verts.keys().collect_vec();
+
+            (0..10000).into_par_iter().for_each(|_| {
+                let mut rng = rand::thread_rng();
+                let (v_a, v_b) = verts
+                    .choose_multiple(&mut rng, 2)
+                    .copied()
+                    .collect_tuple()
+                    .unwrap();
+
+                let path = astar(
+                    &g,
+                    v_a,
+                    |finish| finish == v_b,
+                    |e| *e.weight(),
+                    |v_id| douconel.distance(v_b, v_id).unwrap(),
+                );
+            });
         }
     }
-
-
 }
