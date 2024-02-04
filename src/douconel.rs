@@ -65,17 +65,11 @@ impl<V, E, F> Douconel<V, E, F> {
             if !self.vert_rep.contains_key(vert_id) {
                 bail!("Vert {vert_id:?} has no rep");
             }
-            // if !self.vert_aux.contains_key(vert_id) {
-            //     bail!("Vert {vert_id:?} has no aux");
-            // }
         }
         for face_id in self.faces.keys() {
             if !self.face_rep.contains_key(face_id) {
                 bail!("Face {face_id:?} has no rep");
             }
-            // if self.face_aux.contains_key(face_id) {
-            //     bail!("Face {face_id:?} has no aux");
-            // }
         }
 
         Ok(())
