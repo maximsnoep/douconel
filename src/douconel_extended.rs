@@ -129,6 +129,7 @@ impl<V: HasPosition, E, F> Douconel<V, E, F> {
         2. * std::f32::consts::PI - sum_of_angles
     }
 
+    // To petgraph, directed graph, based on the DCEL, with weights based on Euclidean distance.
     pub fn petgraph(&self) -> DiGraphMap<VertID, f32> {
         let mut edges = vec![];
         for id in self.edges.keys() {
