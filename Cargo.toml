@@ -4,13 +4,13 @@ version = "0.0.1"
 edition = "2021"
 
 [dependencies]
-itertools = "0.11.0"
+itertools = "0.12.1"
 simple-error = "0.3.0"
 rayon = "1.8.1"
 rand = "0.8.5"
 
 slotmap = { version = "1.0.7", features = ["serde"] }
 stl_io = "0.7.0"
-bevy = "0.11.2"
+bevy = "0.12.1"
 petgraph = "0.6.4"
 serde = "1.0.196"
