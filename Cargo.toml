@@ -13,3 +13,4 @@ slotmap = { version = "1.0.7", features = ["serde"] }
 stl_io = "0.7.0"
 bevy = "0.11.2"
 petgraph = "0.6.4"
+serde = "1.0.196"

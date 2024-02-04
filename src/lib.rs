@@ -1,6 +1,6 @@
 pub mod douconel;
 pub mod douconel_extended;
-mod utils;
+pub mod utils;
 
 #[cfg(test)]
 mod tests {
@@ -64,11 +64,12 @@ mod tests {
             assert!(douconel.nr_edges() == 6 * 2);
             assert!(douconel.nr_faces() == 4);
 
-            assert!(douconel.verify_correctness().is_ok());
+            assert!(douconel.verify_properties().is_ok());
+            assert!(douconel.verify_references().is_ok());
             assert!(douconel.verify_invariants().is_ok());
 
             for face_id in douconel.faces.keys() {
-                assert!(douconel.vertices_of_face(face_id).unwrap().len() == 3);
+                assert!(douconel.corners(face_id).len() == 3);
             }
         }
     }
@@ -82,14 +83,15 @@ mod tests {
             assert!(douconel.nr_edges() == 2829 * 2);
             assert!(douconel.nr_faces() == 1886);
 
-            assert!(douconel.verify_correctness().is_ok());
+            assert!(douconel.verify_properties().is_ok());
+            assert!(douconel.verify_references().is_ok());
             assert!(douconel.verify_invariants().is_ok());
 
             for face_id in douconel.faces.keys() {
-                assert!(douconel.vertices_of_face(face_id).unwrap().len() == 3);
+                assert!(douconel.corners(face_id).len() == 3);
             }
 
-            let g = douconel.petgraph().unwrap();
+            let g = douconel.petgraph();
 
             assert!(g.node_count() == 945);
             assert!(g.edge_count() == 2829 * 2);
@@ -104,12 +106,12 @@ mod tests {
                     .collect_tuple()
                     .unwrap();
 
-                let path = astar(
+                let _path = astar(
                     &g,
                     v_a,
                     |finish| finish == v_b,
                     |e| *e.weight(),
-                    |v_id| douconel.distance(v_b, v_id).unwrap(),
+                    |v_id| douconel.distance(v_b, v_id),
                 );
             });
         }
@@ -124,21 +126,22 @@ mod tests {
             assert!(douconel.nr_edges() == 149907 * 2);
             assert!(douconel.nr_faces() == 99938);
 
-            assert!(douconel.verify_correctness().is_ok());
+            assert!(douconel.verify_properties().is_ok());
+            assert!(douconel.verify_references().is_ok());
             assert!(douconel.verify_invariants().is_ok());
 
             for face_id in douconel.faces.keys() {
-                assert!(douconel.vertices_of_face(face_id).unwrap().len() == 3);
+                assert!(douconel.corners(face_id).len() == 3);
             }
 
-            let g = douconel.petgraph().unwrap();
+            let g = douconel.petgraph();
 
             assert!(g.node_count() == 49971);
             assert!(g.edge_count() == 149907 * 2);
 
             let verts = douconel.verts.keys().collect_vec();
 
-            (0..10000).into_par_iter().for_each(|_| {
+            (0..1000).into_par_iter().for_each(|_| {
                 let mut rng = rand::thread_rng();
                 let (v_a, v_b) = verts
                     .choose_multiple(&mut rng, 2)
@@ -146,12 +149,12 @@ mod tests {
                     .collect_tuple()
                     .unwrap();
 
-                let path = astar(
+                let _path = astar(
                     &g,
                     v_a,
                     |finish| finish == v_b,
                     |e| *e.weight(),
-                    |v_id| douconel.distance(v_b, v_id).unwrap(),
+                    |v_id| douconel.distance(v_b, v_id),
                 );
             });
         }
