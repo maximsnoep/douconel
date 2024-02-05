@@ -91,7 +91,7 @@ mod tests {
                 assert!(douconel.corners(face_id).len() == 3);
             }
 
-            let g = douconel.petgraph();
+            let g = douconel.graph();
 
             assert!(g.node_count() == 945);
             assert!(g.edge_count() == 2829 * 2);
@@ -134,7 +134,7 @@ mod tests {
                 assert!(douconel.corners(face_id).len() == 3);
             }
 
-            let g = douconel.petgraph();
+            let g = douconel.graph();
 
             assert!(g.node_count() == 49971);
             assert!(g.edge_count() == 149907 * 2);

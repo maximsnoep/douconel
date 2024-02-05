@@ -2,7 +2,9 @@ use bevy::prelude::*;
 use bevy::render::{mesh::Indices, render_resource::PrimitiveTopology};
 use itertools::Itertools;
 use petgraph::graphmap::DiGraphMap;
+use rand::distributions::weighted;
 use simple_error::bail;
+use std::collections::HashSet;
 use std::error::Error;
 use std::fs::OpenOptions;
 
@@ -39,6 +41,17 @@ impl<V, E, F: HasNormal> Douconel<V, E, F> {
             .map(|&face_id| self.normal(face_id))
             .sum::<Vec3>()
             .normalize()
+    }
+
+    // Get the average normal of a given edge.
+    pub fn edge_normal(&self, id: EdgeID) -> Vec3 {
+        self.edge_normal_offset(id, 0.5)
+    }
+
+    // Get the average normal of a given edge, with offset
+    pub fn edge_normal_offset(&self, edge_id: EdgeID, offset: f32) -> Vec3 {
+        let (f1, f2) = self.faces(edge_id);
+        (self.normal(f1) * (offset) + self.normal(f2) * (1. - offset)).normalize()
     }
 }
 
@@ -104,6 +117,16 @@ impl<V: HasPosition, E, F> Douconel<V, E, F> {
         centroid / count as f32
     }
 
+    // Get midpoint of a given edge.
+    pub fn midpoint(&self, edge_id: EdgeID) -> Vec3 {
+        self.midpoint_offset(edge_id, 0.5)
+    }
+
+    // Get midpoint of a given edge with some offset
+    pub fn midpoint_offset(&self, edge_id: EdgeID, offset: f32) -> Vec3 {
+        self.position(self.root(edge_id)) + self.vector(edge_id) * offset
+    }
+
     // Get vector of a given edge.
     pub fn vector(&self, id: EdgeID) -> Vec3 {
         let (u, v) = self.endpoints(id);
@@ -139,13 +162,68 @@ impl<V: HasPosition, E, F> Douconel<V, E, F> {
     }
 
     // To petgraph, directed graph, based on the DCEL, with weights based on Euclidean distance.
-    pub fn petgraph(&self) -> DiGraphMap<VertID, f32> {
+    pub fn graph(&self) -> DiGraphMap<VertID, f32> {
         let mut edges = vec![];
         for id in self.edges.keys() {
             edges.push((self.root(id), self.root(self.twin(id)), self.length(id)));
         }
 
         DiGraphMap::<VertID, f32>::from_edges(edges)
+    }
+
+    // To petgraph: dual graph
+    pub fn dual_graph(&self) -> DiGraphMap<FaceID, f32> {
+        let mut edges = vec![];
+        for id in self.faces.keys() {
+            for n_id in self.fneighbors(id) {
+                edges.push((id, n_id, self.centroid(id).distance(self.centroid(n_id))));
+            }
+        }
+
+        DiGraphMap::<FaceID, f32>::from_edges(edges)
+    }
+}
+
+impl<V: HasPosition, E, F: HasNormal> Douconel<V, E, F> {
+    // To petgraph: edge graph with <>DWAJD@$@!KM# edge weights
+    pub fn edge_graph(&self, direction: Vec3, gamma: f32, filter: f32) -> DiGraphMap<EdgeID, f32> {
+        let mut edges = vec![];
+        let mut verts = HashSet::new();
+
+        for id in self.edges.keys() {
+            for n_id in self.edges(self.face(id)) {
+                if id == n_id {
+                    continue;
+                }
+
+                let edge_direction = (self.midpoint(n_id) - self.midpoint(id)).normalize();
+                let edge_normal = self.edge_normal(id);
+                let cross = edge_direction.cross(edge_normal);
+                let angle = (direction.angle_between(cross) / std::f32::consts::PI) * 180.;
+                let weight = angle.powf(gamma);
+
+                if angle < filter {
+                    edges.push((id, n_id, weight));
+                    verts.insert(id);
+                    verts.insert(n_id);
+                }
+            }
+        }
+
+        for id in verts {
+            let n_id = self.twin(id);
+
+            let edge_direction = self.vector(n_id).normalize();
+            let angle = (direction.angle_between(edge_direction) / std::f32::consts::PI) * 180.;
+            println!("{:?}", angle);
+            let weight = angle.powf(gamma);
+
+            if angle < filter {
+                edges.push((id, n_id, weight));
+            }
+        }
+
+        DiGraphMap::<EdgeID, f32>::from_edges(edges)
     }
 }
 

@@ -235,6 +235,11 @@ impl<V, E, F> Douconel<V, E, F> {
         faces
     }
 
+    // Returns the faces around a given vertex.
+    pub fn faces(&self, id: EdgeID) -> (FaceID, FaceID) {
+        (self.face(id), self.face(self.twin(id)))
+    }
+
     // Returns the edge between the two vertices. Returns None if the vertices are not connected.
     pub fn edge_between_verts(&self, id_a: VertID, id_b: VertID) -> Option<(EdgeID, EdgeID)> {
         let edges_a = self.outgoing(id_a);
