@@ -31,6 +31,15 @@ impl<V, E, F: HasNormal> Douconel<V, E, F> {
     pub fn normal(&self, id: FaceID) -> Vec3 {
         self.faces[id].normal()
     }
+
+    // Get the average normals around a given vertex.
+    pub fn vert_normal(&self, id: VertID) -> Vec3 {
+        self.star(id)
+            .iter()
+            .map(|&face_id| self.normal(face_id))
+            .sum::<Vec3>()
+            .normalize()
+    }
 }
 
 pub trait HasColor {
