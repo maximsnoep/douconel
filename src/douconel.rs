@@ -1,3 +1,4 @@
+use bimap::BiMap;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use simple_error::bail;
@@ -277,7 +278,7 @@ impl<V, E, F> Douconel<V, E, F> {
         neighbors
     }
 
-    // Returns the neighbors of a given face.
+    // Returns the (edge-wise) neighbors of a given face.
     pub fn fneighbors(&self, id: FaceID) -> Vec<FaceID> {
         let mut neighbors = Vec::new();
         for edge_id in self.edges(id.into()) {
@@ -305,7 +306,7 @@ impl<V, E, F> Douconel<V, E, F> {
 impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
     pub fn from_faces(
         faces: Vec<Vec<usize>>,
-    ) -> Result<(Self, HashMap<usize, VertID>, HashMap<usize, FaceID>), Box<dyn Error>> {
+    ) -> Result<(Self, BiMap<usize, VertID>, BiMap<usize, FaceID>), Box<dyn Error>> {
         let mut mesh = Self::new();
 
         // 1. Create the vertices.
@@ -335,8 +336,8 @@ impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
 
         // 1. Create the vertices.
         // Need mapping between original indices, and new pointers
-        let mut vertex_pointers = HashMap::<usize, VertID>::new();
-        let mut face_pointers = HashMap::<usize, FaceID>::new();
+        let mut vertex_pointers = BiMap::<usize, VertID>::new();
+        let mut face_pointers = BiMap::<usize, FaceID>::new();
 
         let vertices = faces
             .iter()
@@ -366,8 +367,14 @@ impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
                 .tuple_windows()
                 .map(|(inp_start_vertex, inp_end_vertex)| {
                     (
-                        vertex_pointers[inp_start_vertex],
-                        vertex_pointers[inp_end_vertex],
+                        vertex_pointers
+                            .get_by_left(inp_start_vertex)
+                            .copied()
+                            .unwrap(),
+                        vertex_pointers
+                            .get_by_left(inp_end_vertex)
+                            .copied()
+                            .unwrap(),
                     )
                 })
                 .collect_vec();

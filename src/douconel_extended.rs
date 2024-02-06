@@ -76,7 +76,7 @@ impl<V: Default + HasPosition, E: Default, F: Default + HasNormal + HasColor> Do
 
         if let Ok((mut douconel, vertex_map, face_map)) = Self::from_faces(faces) {
             for (inp_vertex_id, inp_vertex_pos) in stl.vertices.iter().enumerate() {
-                let vert_id = vertex_map[&inp_vertex_id];
+                let vert_id = vertex_map.get_by_left(&inp_vertex_id).copied().unwrap();
                 if let Some(v) = douconel.verts.get_mut(vert_id) {
                     v.set_position(Vec3::new(
                         inp_vertex_pos[0],
@@ -86,7 +86,7 @@ impl<V: Default + HasPosition, E: Default, F: Default + HasNormal + HasColor> Do
                 }
             }
             for (inp_face_id, inp_face) in stl.faces.iter().enumerate() {
-                let face_id = face_map[&inp_face_id];
+                let face_id = face_map.get_by_left(&inp_face_id).copied().unwrap();
                 if let Some(f) = douconel.faces.get_mut(face_id) {
                     f.set_normal(Vec3::new(
                         inp_face.normal[0],
