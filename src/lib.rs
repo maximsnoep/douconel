@@ -1,6 +1,5 @@
 pub mod douconel;
 pub mod douconel_extended;
-pub mod utils;
 
 #[cfg(test)]
 mod tests {

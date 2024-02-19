@@ -2,14 +2,11 @@ use bevy::prelude::*;
 use bevy::render::{mesh::Indices, render_resource::PrimitiveTopology};
 use itertools::Itertools;
 use petgraph::graphmap::DiGraphMap;
-use rand::distributions::weighted;
 use simple_error::bail;
 use std::collections::HashSet;
 use std::error::Error;
 use std::fs::OpenOptions;
-
 use crate::douconel::{Douconel, EdgeID, FaceID, VertID};
-use crate::utils;
 
 pub trait HasPosition {
     fn position(&self) -> Vec3;
@@ -227,6 +224,31 @@ impl<V: HasPosition, E, F: HasNormal> Douconel<V, E, F> {
     }
 }
 
+impl<V: HasPosition, E, F: HasNormal> Douconel<V, E, F> {
+    // To petgraph: edge graph with <>DWAJD@$@!KM# edge weights
+    pub fn acyclic_graph(
+        &self,
+        direction: Vec3,
+        gamma: f32,
+        filter: f32,
+    ) -> DiGraphMap<VertID, f32> {
+        let mut edges = vec![];
+
+        for id in self.edges.keys() {
+            let edge_direction = self.vector(id).normalize();
+            let angle = (edge_direction.angle_between(direction) / std::f32::consts::PI) * 180.;
+
+            let (u, v) = self.endpoints(id);
+
+            if angle < filter {
+                edges.push((u, v, angle));
+            }
+        }
+
+        DiGraphMap::<VertID, f32>::from_edges(edges)
+    }
+}
+
 // Construct a mesh object that can be rendered using the Bevy framework.
 impl<V: HasPosition, E, F: HasNormal + HasColor> Douconel<V, E, F> {
     pub fn bevy(&self) -> Mesh {
@@ -242,7 +264,7 @@ impl<V: HasPosition, E, F: HasNormal + HasColor> Douconel<V, E, F> {
             for vertex_id in self.corners(face_id) {
                 let position = self.position(vertex_id);
                 vertex_positions.push(position);
-                let normal = utils::average(
+                let normal = potpoursi::math::average(
                     self.star(vertex_id)
                         .iter()
                         .map(|&face_id| self.normal(face_id)),
