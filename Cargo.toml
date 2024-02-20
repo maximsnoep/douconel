@@ -7,14 +7,14 @@ edition = "2021"
 potpoursi = { path = "../potpoursi" }
 
 stl_io = "0.7.0"
-bevy = "0.12.1"
 petgraph = "0.6.4"
 
 rand = "0.8.5"
-rayon = "1.8.1"
+glam = "0.24.2"
 serde = "1.0.196"
 itertools = "0.12.1"
 simple-error = "0.3.0"
 
 slotmap = { version = "1.0.7", features = ["serde"] }
 bimap = "0.6.3"
+bevy = "0.12.0"

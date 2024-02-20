@@ -1,12 +1,15 @@
-use bevy::prelude::*;
+use crate::douconel::{Douconel, EdgeID, FaceID, VertID};
+use bevy::render::color::Color;
+use bevy::render::mesh::Mesh;
 use bevy::render::{mesh::Indices, render_resource::PrimitiveTopology};
+use glam::Vec3;
 use itertools::Itertools;
+use petgraph::data::{Build, FromElements};
 use petgraph::graphmap::DiGraphMap;
 use simple_error::bail;
 use std::collections::HashSet;
 use std::error::Error;
 use std::fs::OpenOptions;
-use crate::douconel::{Douconel, EdgeID, FaceID, VertID};
 
 pub trait HasPosition {
     fn position(&self) -> Vec3;
@@ -166,6 +169,15 @@ impl<V: HasPosition, E, F> Douconel<V, E, F> {
         }
 
         DiGraphMap::<VertID, f32>::from_edges(edges)
+    }
+
+    // To petgraph, copy only nodes.
+    pub fn graph_nodes(&self) -> DiGraphMap<VertID, f32> {
+        let mut g = DiGraphMap::<VertID, f32>::new();
+        for id in self.verts.keys() {
+            g.add_node(id);
+        }
+        g
     }
 
     // To petgraph: dual graph

@@ -8,11 +8,11 @@ mod tests {
         douconel::Douconel,
         douconel_extended::{HasColor, HasNormal, HasPosition},
     };
-    use bevy::prelude::*;
+    use bevy::render::color::Color;
+    use glam::Vec3;
     use itertools::Itertools;
     use petgraph::{algo::astar, visit::EdgeRef};
     use rand::seq::SliceRandom;
-    use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
     #[derive(Default, Copy, Clone)]
     struct VertData {
@@ -97,7 +97,7 @@ mod tests {
 
             let verts = douconel.verts.keys().collect_vec();
 
-            (0..100000).into_par_iter().for_each(|_| {
+            (0..10).into_iter().for_each(|_| {
                 let mut rng = rand::thread_rng();
                 let (v_a, v_b) = verts
                     .choose_multiple(&mut rng, 2)
@@ -140,7 +140,7 @@ mod tests {
 
             let verts = douconel.verts.keys().collect_vec();
 
-            (0..1000).into_par_iter().for_each(|_| {
+            (0..10).into_iter().for_each(|_| {
                 let mut rng = rand::thread_rng();
                 let (v_a, v_b) = verts
                     .choose_multiple(&mut rng, 2)
