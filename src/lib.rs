@@ -1,57 +1,19 @@
 pub mod douconel;
-pub mod douconel_extended;
+pub mod douconel_bevy;
+pub mod douconel_embedded;
+pub mod douconel_petgraph;
+pub mod douconel_stl;
 
 #[cfg(test)]
 mod tests {
 
     use crate::{
         douconel::Douconel,
-        douconel_extended::{HasColor, HasNormal, HasPosition},
+        douconel_embedded::{EmbeddedFace, EmbeddedVertex},
     };
-    use bevy::render::color::Color;
-    use glam::Vec3;
     use itertools::Itertools;
     use petgraph::{algo::astar, visit::EdgeRef};
     use rand::seq::SliceRandom;
-
-    #[derive(Default, Copy, Clone)]
-    struct VertData {
-        position: Vec3,
-    }
-
-    impl HasPosition for VertData {
-        fn position(&self) -> Vec3 {
-            self.position
-        }
-        fn set_position(&mut self, position: Vec3) {
-            self.position = position;
-        }
-    }
-
-    #[derive(Default, Copy, Clone)]
-    struct FaceData {
-        normal: Vec3,
-        color: Color,
-    }
-
-    impl HasNormal for FaceData {
-        fn normal(&self) -> Vec3 {
-            self.normal
-        }
-        fn set_normal(&mut self, normal: Vec3) {
-            self.normal = normal;
-        }
-    }
-
-    impl HasColor for FaceData {
-        fn color(&self) -> Color {
-            self.color
-        }
-
-        fn set_color(&mut self, color: Color) {
-            self.color = color;
-        }
-    }
 
     #[test]
     fn from_manual() {
@@ -75,7 +37,8 @@ mod tests {
 
     #[test]
     fn from_blub_stl() {
-        let douconel = Douconel::<VertData, (), FaceData>::from_stl("assets/blub001k.stl");
+        let douconel =
+            Douconel::<EmbeddedVertex, (), EmbeddedFace>::from_stl("assets/blub001k.stl");
         assert!(douconel.is_ok());
         if let Ok(douconel) = douconel {
             assert!(douconel.nr_verts() == 945);
@@ -90,7 +53,7 @@ mod tests {
                 assert!(douconel.corners(face_id).len() == 3);
             }
 
-            let g = douconel.graph();
+            let g = douconel.graph_euclidean();
 
             assert!(g.node_count() == 945);
             assert!(g.edge_count() == 2829 * 2);
@@ -118,7 +81,8 @@ mod tests {
 
     #[test]
     fn from_nefertiti_stl() {
-        let douconel = Douconel::<VertData, (), FaceData>::from_stl("assets/nefertiti099k.stl");
+        let douconel =
+            Douconel::<EmbeddedVertex, (), EmbeddedFace>::from_stl("assets/nefertiti099k.stl");
         assert!(douconel.is_ok());
         if let Ok(douconel) = douconel {
             assert!(douconel.nr_verts() == 49971);
@@ -133,7 +97,7 @@ mod tests {
                 assert!(douconel.corners(face_id).len() == 3);
             }
 
-            let g = douconel.graph();
+            let g = douconel.graph_euclidean();
 
             assert!(g.node_count() == 49971);
             assert!(g.edge_count() == 149907 * 2);
