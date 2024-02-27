@@ -22,7 +22,14 @@ impl<V, E, F> Douconel<V, E, F> {
         filter_verts: HashSet<VertID>,
         filter_edges: HashSet<EdgeID>,
     ) -> DiGraphMap<VertID, EdgeID> {
-        let mut edges = vec![];
+        let mut g = DiGraphMap::<VertID, EdgeID>::new();
+        for vertex_id in self.verts.keys() {
+            if filter_verts.contains(&vertex_id) {
+                continue;
+            }
+            g.add_node(vertex_id);
+        }
+
         for edge_id in self.edges.keys() {
             if filter_edges.contains(&edge_id) {
                 continue;
@@ -31,10 +38,10 @@ impl<V, E, F> Douconel<V, E, F> {
             if filter_verts.contains(&root) || filter_verts.contains(&toor) {
                 continue;
             }
-            edges.push((root, toor, edge_id));
+            g.add_edge(root, toor, edge_id);
         }
 
-        DiGraphMap::<VertID, EdgeID>::from_edges(edges)
+        g
     }
 
     // To petgraph, copy only nodes.
