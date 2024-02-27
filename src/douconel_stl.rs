@@ -13,7 +13,9 @@ impl<V: Default + HasPosition, E: Default, F: Default + HasNormal> Douconel<V, E
 
         let faces = stl.faces.iter().map(|f| f.vertices.to_vec()).collect_vec();
 
-        if let Ok((mut douconel, vertex_map, face_map)) = Self::from_faces(faces) {
+        let res = Self::from_faces(faces);
+
+        if let Ok((mut douconel, vertex_map, face_map)) = res {
             for (inp_vertex_id, inp_vertex_pos) in stl.vertices.iter().enumerate() {
                 let vert_id = vertex_map.get_by_left(&inp_vertex_id).copied().unwrap();
                 if let Some(v) = douconel.verts.get_mut(vert_id) {
@@ -37,7 +39,7 @@ impl<V: Default + HasPosition, E: Default, F: Default + HasNormal> Douconel<V, E
 
             Ok(douconel)
         } else {
-            bail!("Failed to construct douconel")
+            bail!(res.err().unwrap())
         }
     }
 }
