@@ -131,6 +131,31 @@ impl<V: HasPosition, E, F: HasNormal> Douconel<V, E, F> {
 
         DiGraphMap::<EdgeID, f32>::from_edges(edges)
     }
+
+    // Graph s.t. node for each original edge, and (directed) edges between nodes if the original edges share a face
+    // Nodes have as position the midpoint of the original edge
+    pub fn midpoint_graph(&self) -> DiGraphMap<EdgeID, f32> {
+        let mut edges = vec![];
+        for id in self.edges.keys() {
+            for n_id in self.edges(self.face(id)) {
+                if id == n_id {
+                    continue;
+                }
+
+                let weight = self.midpoint(n_id).distance(self.midpoint(id));
+                edges.push((id, n_id, weight));
+            }
+            for n_id in self.edges(self.face(self.twin(id))) {
+                if id == n_id {
+                    continue;
+                }
+
+                let weight = self.midpoint(n_id).distance(self.midpoint(id));
+                edges.push((id, n_id, weight));
+            }
+        }
+        DiGraphMap::<EdgeID, f32>::from_edges(edges)
+    }
 }
 
 impl<V: HasPosition, E, F: HasNormal> Douconel<V, E, F> {
