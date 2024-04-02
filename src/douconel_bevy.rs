@@ -9,7 +9,7 @@ use std::collections::HashMap;
 
 /// From an embedded DCEL, construct a mesh object that can be rendered using the Bevy framework. Requires a color_map to assign colors to faces. If no color is assigned to a face, it will be black.
 impl<V: HasPosition, E, F: HasNormal> Douconel<V, E, F> {
-    pub fn bevy(&self, color_map: HashMap<FaceID, Color>) -> Mesh {
+    pub fn bevy(&self, color_map: &HashMap<FaceID, Color>) -> Mesh {
         let mut mesh_triangle_list = Mesh::new(PrimitiveTopology::TriangleList);
         let number_of_faces = self.nr_faces();
         let mut vertex_positions = Vec::with_capacity(number_of_faces * 3);

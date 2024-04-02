@@ -15,5 +15,6 @@ bimap = "0.6.3"
 priq = "0.1.0"
 
 stl_io = "0.7.0"
+obj = "0.10.2"
 petgraph = "0.6.4"
 bevy_render = "0.12.1"
