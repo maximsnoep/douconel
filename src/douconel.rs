@@ -32,6 +32,7 @@ pub struct Douconel<V, E, F> {
 }
 
 impl<V, E, F> Douconel<V, E, F> {
+    /// Creates a new, empty Douconel.
     pub fn new() -> Self {
         Self {
             verts: SlotMap::with_key(),
@@ -46,7 +47,7 @@ impl<V, E, F> Douconel<V, E, F> {
         }
     }
 
-    // iterate through all elements, and assure that all elements have set properties
+    /// Verifies that all elements have their required properties set.
     pub fn verify_properties(&self) -> Result<(), Box<dyn Error>> {
         for edge_id in self.edges.keys() {
             if !self.edge_root.contains_key(edge_id) {
@@ -76,7 +77,7 @@ impl<V, E, F> Douconel<V, E, F> {
         Ok(())
     }
 
-    // iterate through all elements, and assure that all references are existing
+    /// Verifies that all references between elements are valid.
     pub fn verify_references(&self) -> Result<(), Box<dyn Error>> {
         for edge_id in self.edges.keys() {
             let root_id = self.edge_root[edge_id];
@@ -113,6 +114,7 @@ impl<V, E, F> Douconel<V, E, F> {
         Ok(())
     }
 
+    /// Verifies the invariants of the DCEL structure.
     pub fn verify_invariants(&self) -> Result<(), Box<dyn Error>> {
         // this->twin->twin == this
         for edge_id in self.edges.keys() {
