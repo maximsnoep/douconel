@@ -1,4 +1,6 @@
-use bimap::BiMap;
+#![warn(clippy::all, clippy::pedantic, clippy::nursery, clippy::cargo)]
+
+use bimap::BiHashMap;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use simple_error::bail;
@@ -13,6 +15,9 @@ slotmap::new_key_type! {
     pub struct EdgeID;
     pub struct FaceID;
 }
+
+pub type FaceMap = BiHashMap<usize, FaceID>;
+pub type VertMap = BiHashMap<usize, VertID>;
 
 // The doubly connected edge list (DCEL or Douconel), also known as half-edge data structure,
 // is a data structure to represent an embedding of a planar graph in the plane, and polytopes in 3D.
@@ -32,7 +37,8 @@ pub struct Douconel<V, E, F> {
 }
 
 impl<V, E, F> Douconel<V, E, F> {
-    /// Creates a new, empty Douconel.
+    // Creates a new, empty Douconel.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             verts: SlotMap::with_key(),
@@ -47,7 +53,7 @@ impl<V, E, F> Douconel<V, E, F> {
         }
     }
 
-    /// Verifies that all elements have their required properties set.
+    // Verifies that all elements have their required properties set.
     pub fn verify_properties(&self) -> Result<(), Box<dyn Error>> {
         for edge_id in self.edges.keys() {
             if !self.edge_root.contains_key(edge_id) {
@@ -80,23 +86,10 @@ impl<V, E, F> Douconel<V, E, F> {
     /// Verifies that all references between elements are valid.
     pub fn verify_references(&self) -> Result<(), Box<dyn Error>> {
         for edge_id in self.edges.keys() {
-            let root_id = self.edge_root[edge_id];
-            let face_id = self.edge_face[edge_id];
-            let next_id = self.edge_next[edge_id];
-            let twin_id = self.edge_twin[edge_id];
-
-            if !self.verts.contains_key(root_id) {
-                bail!("Edge {edge_id:?} has non-existing root");
-            }
-            if !self.faces.contains_key(face_id) {
-                bail!("Edge {edge_id:?} has non-existing face");
-            }
-            if !self.edges.contains_key(next_id) {
-                bail!("Edge {edge_id:?} has non-existing next");
-            }
-            if !self.edges.contains_key(twin_id) {
-                bail!("Edge {edge_id:?} has non-existing twin");
-            }
+            let _root_id = self.root(edge_id);
+            let _face_id = self.face(edge_id);
+            let _next_id = self.next(edge_id);
+            let _twin_id = self.twin(edge_id);
         }
         for vert_id in self.verts.keys() {
             let rep_id = self.vert_rep[vert_id];
@@ -162,67 +155,131 @@ impl<V, E, F> Douconel<V, E, F> {
         Ok(())
     }
 
-    // Returns the "representative" edge
+    // Returns the "representative" edge of the given vertex.
+    // Panics if the vertex has no representative edge defined.
+    #[must_use]
     pub fn vrep(&self, id: VertID) -> EdgeID {
-        self.vert_rep[id]
+        self.vert_rep.get(id).copied().unwrap_or_else(|| {
+            panic!("V{id:?} has no representative edge defined.");
+        })
     }
+
+    // Returns the "representative" edge of the given face.
+    // Panics if the face has no representative edge defined.
+    #[must_use]
     pub fn frep(&self, id: FaceID) -> EdgeID {
-        self.face_rep[id]
+        self.face_rep.get(id).copied().unwrap_or_else(|| {
+            panic!("F:{id:?} has no representative edge defined.");
+        })
     }
 
     // Returns the root vertex of the given edge.
+    // Panics if the edge has no root defined or if the root does not exist.
+    #[must_use]
     pub fn root(&self, id: EdgeID) -> VertID {
-        self.edge_root[id]
+        let root_id = self
+            .edge_root
+            .get(id)
+            .copied()
+            .unwrap_or_else(|| panic!("E:{id:?} has no root defined."));
+
+        assert!(
+            self.verts.contains_key(root_id),
+            "E:{id:?} has non-existing root"
+        );
+
+        root_id
     }
 
     // Returns the twin edge of the given edge.
+    // Panics if the edge has no twin defined or if the twin does not exist.
+    #[must_use]
     pub fn twin(&self, id: EdgeID) -> EdgeID {
-        self.edge_twin[id]
+        let twin_id = self.edge_twin.get(id).copied().unwrap_or_else(|| {
+            panic!("E:{id:?} has no twin defined.");
+        });
+
+        assert!(
+            self.edges.contains_key(twin_id),
+            "E:{id:?} has non-existing twin"
+        );
+
+        twin_id
     }
 
     // Returns the next edge of the given edge.
+    // Panics if the edge has no next defined or if the next does not exist.
+    #[must_use]
     pub fn next(&self, id: EdgeID) -> EdgeID {
-        self.edge_next[id]
+        let next_id = self.edge_next.get(id).copied().unwrap_or_else(|| {
+            panic!("E:{id:?} has no next defined.");
+        });
+
+        assert!(
+            self.edges.contains_key(next_id),
+            "E:{id:?} has non-existing next"
+        );
+
+        next_id
     }
 
     // Returns the face of the given edge.
+    // Panics if the edge has no face defined or if the face does not exist.
+    #[must_use]
     pub fn face(&self, id: EdgeID) -> FaceID {
-        self.edge_face[id]
+        let face_id = self.edge_face.get(id).copied().unwrap_or_else(|| {
+            panic!("E:{id:?} has no face defined.");
+        });
+
+        assert!(
+            self.faces.contains_key(face_id),
+            "E:{id:?} has non-existing face"
+        );
+
+        face_id
     }
 
     // Returns the start and end vertex IDs of the given edge.
+    // Panics if any of the roots are not defined or do not exist.
+    #[must_use]
     pub fn endpoints(&self, id: EdgeID) -> (VertID, VertID) {
         (self.root(id), self.root(self.twin(id)))
     }
 
     // Returns the corner vertices of a given face.
+    #[must_use]
     pub fn corners(&self, id: FaceID) -> Vec<VertID> {
         let mut vertices = Vec::new();
-        for edge_id in self.edges(id.into()) {
+        for edge_id in self.edges(id) {
             vertices.push(self.root(edge_id));
         }
         vertices
     }
 
     // Returns the outgoing edges of a given vertex.
+    #[must_use]
     pub fn outgoing(&self, id: VertID) -> Vec<EdgeID> {
         let mut edges = vec![self.vrep(id)];
         loop {
-            let twin = self.twin(edges.last().copied().unwrap());
-            let next = self.next(twin);
-            if edges.contains(&next) {
+            let twin = self.twin(edges.last().copied().unwrap_or_else(|| {
+                panic!("{edges:?} should be non-empty");
+            }));
+            if edges.contains(&self.next(twin)) {
                 return edges;
             }
-            edges.push(next);
+            edges.push(self.next(twin));
         }
     }
 
     // Returns the edges of a given face.
+    #[must_use]
     pub fn edges(&self, id: FaceID) -> Vec<EdgeID> {
         let mut edges = vec![self.frep(id)];
         loop {
-            let next = self.next(edges.last().copied().unwrap());
-            if edges.contains(&next) {
+            let next = self.next(edges.last().copied().unwrap_or_else(|| {
+                panic!("{edges:?} should be non-empty");
+            }));
+            if next == self.frep(id) {
                 return edges;
             }
             edges.push(next);
@@ -230,20 +287,22 @@ impl<V, E, F> Douconel<V, E, F> {
     }
 
     // Returns the faces around a given vertex.
+    #[must_use]
     pub fn star(&self, id: VertID) -> Vec<FaceID> {
-        let mut faces = Vec::new();
-        for edge_id in self.outgoing(id) {
-            faces.push(self.face(edge_id));
-        }
-        faces
+        self.outgoing(id)
+            .iter()
+            .map(|&edge_id| self.face(edge_id))
+            .collect()
     }
 
     // Returns the faces around a given vertex.
-    pub fn faces(&self, id: EdgeID) -> (FaceID, FaceID) {
-        (self.face(id), self.face(self.twin(id)))
+    #[must_use]
+    pub fn faces(&self, id: EdgeID) -> [FaceID; 2] {
+        [self.face(id), self.face(self.twin(id))]
     }
 
     // Returns the edge between the two vertices. Returns None if the vertices are not connected.
+    #[must_use]
     pub fn edge_between_verts(&self, id_a: VertID, id_b: VertID) -> Option<(EdgeID, EdgeID)> {
         let edges_a = self.outgoing(id_a);
         let edges_b = self.outgoing(id_b);
@@ -258,6 +317,7 @@ impl<V, E, F> Douconel<V, E, F> {
     }
 
     // Returns the edge between the two faces. Returns None if the faces do not share an edge.
+    #[must_use]
     pub fn edge_between_faces(&self, id_a: FaceID, id_b: FaceID) -> Option<(EdgeID, EdgeID)> {
         let edges_a = self.edges(id_a);
         let edges_b = self.edges(id_b);
@@ -272,6 +332,7 @@ impl<V, E, F> Douconel<V, E, F> {
     }
 
     // Returns the neighbors of a given vertex.
+    #[must_use]
     pub fn vneighbors(&self, id: VertID) -> Vec<VertID> {
         let mut neighbors = Vec::new();
         for edge_id in self.outgoing(id) {
@@ -281,34 +342,37 @@ impl<V, E, F> Douconel<V, E, F> {
     }
 
     // Returns the (edge-wise) neighbors of a given face.
+    #[must_use]
     pub fn fneighbors(&self, id: FaceID) -> Vec<FaceID> {
         let mut neighbors = Vec::new();
-        for edge_id in self.edges(id.into()) {
+        for edge_id in self.edges(id) {
             neighbors.push(self.face(self.twin(edge_id)));
         }
         neighbors
     }
 
     // Returns the number of vertices in the mesh.
+    #[must_use]
     pub fn nr_verts(&self) -> usize {
         self.verts.len()
     }
 
     // Returns the number of (half)edges in the mesh.
+    #[must_use]
     pub fn nr_edges(&self) -> usize {
         self.edges.len()
     }
 
     // Returns the number of faces in the mesh.
+    #[must_use]
     pub fn nr_faces(&self) -> usize {
         self.faces.len()
     }
 }
 
+// Construct a DCEL from a list of faces, where each face is a list of vertex indices.
 impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
-    pub fn from_faces(
-        faces: Vec<Vec<usize>>,
-    ) -> Result<(Self, BiMap<usize, VertID>, BiMap<usize, FaceID>), Box<dyn Error>> {
+    pub fn from_faces(faces: &[Vec<usize>]) -> Result<(Self, VertMap, FaceMap), Box<dyn Error>> {
         let mut mesh = Self::new();
 
         // 1. Create the vertices.
@@ -338,15 +402,10 @@ impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
 
         // 1. Create the vertices.
         // Need mapping between original indices, and new pointers
-        let mut vertex_pointers = BiMap::<usize, VertID>::new();
-        let mut face_pointers = BiMap::<usize, FaceID>::new();
+        let mut vertex_pointers = VertMap::new();
+        let mut face_pointers = FaceMap::new();
 
-        let vertices = faces
-            .iter()
-            .flatten()
-            .unique()
-            .map(|&inp_vert_id| inp_vert_id)
-            .collect_vec();
+        let vertices = faces.iter().flatten().unique().copied().collect_vec();
 
         for inp_vert_id in vertices {
             let vert_id = mesh.verts.insert(V::default());
@@ -355,8 +414,9 @@ impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
 
         // 2. Create the faces with its (half)edges.
         // Need mapping between vertices and edges
-        let mut root_to_edges = HashMap::<VertID, Vec<EdgeID>>::new();
-        let mut endpoints_to_edges = HashMap::<(VertID, VertID), Vec<EdgeID>>::new();
+        let mut vert_to_edge = HashMap::<VertID, EdgeID>::new();
+        let mut face_to_edge = HashMap::<FaceID, EdgeID>::new();
+        let mut endpoints_to_edges = HashMap::<(VertID, VertID), EdgeID>::new();
         for (inp_face_id, inp_face_edges) in faces.iter().enumerate() {
             let face_id = mesh.faces.insert(F::default());
             face_pointers.insert(inp_face_id, face_id);
@@ -372,11 +432,15 @@ impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
                         vertex_pointers
                             .get_by_left(inp_start_vertex)
                             .copied()
-                            .unwrap(),
+                            .unwrap_or_else(|| {
+                                panic!("V:{inp_start_vertex:?} does not have a vertex pointer")
+                            }),
                         vertex_pointers
                             .get_by_left(inp_end_vertex)
                             .copied()
-                            .unwrap(),
+                            .unwrap_or_else(|| {
+                                panic!("V:{inp_end_vertex:?} does not have a vertex pointer")
+                            }),
                     )
                 })
                 .collect_vec();
@@ -386,24 +450,19 @@ impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
             for (start_vertex, end_vertex) in edges {
                 let edge_id = mesh.edges.insert(E::default());
 
-                root_to_edges
-                    .entry(start_vertex)
-                    .or_insert(Vec::new())
-                    .push(edge_id);
+                vert_to_edge.insert(start_vertex, edge_id);
+                face_to_edge.insert(face_id, edge_id);
 
-                endpoints_to_edges
-                    .entry((start_vertex, end_vertex))
-                    .or_insert(Vec::new())
-                    .push(edge_id);
+                if endpoints_to_edges.contains_key(&(start_vertex, end_vertex)) {
+                    bail!("Edge for ({start_vertex:?}, {end_vertex:?}) already exists");
+                }
+                endpoints_to_edges.insert((start_vertex, end_vertex), edge_id);
 
                 mesh.edge_root.insert(edge_id, start_vertex);
                 mesh.edge_face.insert(edge_id, face_id);
 
                 edge_ids.push(edge_id);
             }
-
-            // Set the representative edge for the face
-            mesh.face_rep.insert(face_id, edge_ids[0]);
 
             // Linking each edge to its next edge in the face
             edge_ids.push(edge_ids[0]); // Re-append the first to loop back
@@ -412,39 +471,33 @@ impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
             }
         }
 
-        // 3. Assign representatives to vertices.
-        for (vert_id, edge_ids) in root_to_edges {
-            mesh.vert_rep.insert(vert_id, edge_ids[0]);
+        // 3. Assign representatives to vertices and faces
+        for vert_id in mesh.verts.keys() {
+            mesh.vert_rep.insert(
+                vert_id,
+                vert_to_edge.get(&vert_id).copied().unwrap_or_else(|| {
+                    panic!("V:{vert_id:?} has no representative edge");
+                }),
+            );
+        }
+        for face_id in mesh.faces.keys() {
+            mesh.face_rep.insert(
+                face_id,
+                face_to_edge.get(&face_id).copied().unwrap_or_else(|| {
+                    panic!("F:{face_id:?} has no representative edge");
+                }),
+            );
         }
 
         // 4. Assign twins.
-        for (&(vert_a, vert_b), edge_ids) in &endpoints_to_edges {
-            // Check for the expected single edge id
-            if edge_ids.len() != 1 {
-                bail!(
-                    "Expected 1 edge_id for ({:?}, {:?}), found {}",
-                    vert_a,
-                    vert_b,
-                    edge_ids.len()
-                );
-            }
-            let edge_id = edge_ids[0];
-
+        for (&(vert_a, vert_b), &edge_id) in &endpoints_to_edges {
             // Retrieve the twin edge
-            let twin_id = match endpoints_to_edges.get(&(vert_b, vert_a)) {
-                Some(ids) => {
-                    if ids.len() != 1 {
-                        bail!(
-                            "Expected 1 twin_id for ({:?}, {:?}), found {}",
-                            vert_b,
-                            vert_a,
-                            ids.len()
-                        );
-                    }
-                    ids[0]
-                }
-                None => bail!("Twin edge for ({:?}, {:?}) not found", vert_a, vert_b),
-            };
+            let twin_id = endpoints_to_edges
+                .get(&(vert_b, vert_a))
+                .copied()
+                .unwrap_or_else(|| {
+                    panic!("Edge for (V:{vert_a:?}, V:{vert_b:?}) does not have a twin")
+                });
 
             // Assign twins
             mesh.edge_twin.insert(edge_id, twin_id);
