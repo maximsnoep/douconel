@@ -2,18 +2,23 @@
 
 use bimap::BiHashMap;
 use itertools::Itertools;
+use ordered_float::OrderedFloat;
+use rand::seq::IteratorRandom;
 use serde::{Deserialize, Serialize};
 use simple_error::bail;
 use slotmap::SecondaryMap;
 use slotmap::SlotMap;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::Debug;
+use std::rc::Rc;
 
 slotmap::new_key_type! {
     pub struct VertID;
     pub struct EdgeID;
     pub struct FaceID;
+    pub struct EdgePairID;
 }
 
 pub type FaceMap = BiHashMap<usize, FaceID>;
@@ -26,6 +31,7 @@ pub struct Douconel<V, E, F> {
     pub verts: SlotMap<VertID, V>,
     pub edges: SlotMap<EdgeID, E>,
     pub faces: SlotMap<FaceID, F>,
+    pub edgepairs: SlotMap<EdgePairID, (EdgeID, EdgeID)>,
 
     edge_root: SecondaryMap<EdgeID, VertID>,
     edge_face: SecondaryMap<EdgeID, FaceID>,
@@ -44,6 +50,7 @@ impl<V, E, F> Douconel<V, E, F> {
             verts: SlotMap::with_key(),
             edges: SlotMap::with_key(),
             faces: SlotMap::with_key(),
+            edgepairs: SlotMap::with_key(),
             edge_root: SecondaryMap::new(),
             edge_face: SecondaryMap::new(),
             edge_next: SecondaryMap::new(),
@@ -368,6 +375,94 @@ impl<V, E, F> Douconel<V, E, F> {
     pub fn nr_faces(&self) -> usize {
         self.faces.len()
     }
+
+    // Return `n` random vertices.
+    #[must_use]
+    pub fn random_verts(&self, n: usize) -> Vec<VertID> {
+        let mut rng = rand::thread_rng();
+        self.verts.keys().choose_multiple(&mut rng, n)
+    }
+
+    // Return `n` random edges.
+    #[must_use]
+    pub fn random_edges(&self, n: usize) -> Vec<EdgeID> {
+        let mut rng = rand::thread_rng();
+        self.edges.keys().choose_multiple(&mut rng, n)
+    }
+
+    // Return `n` random faces.
+    #[must_use]
+    pub fn random_faces(&self, n: usize) -> Vec<FaceID> {
+        let mut rng = rand::thread_rng();
+        self.faces.keys().choose_multiple(&mut rng, n)
+    }
+
+    pub fn neighbor_function_primal(&self) -> impl Fn(VertID) -> Vec<VertID> + '_ {
+        |v_id| self.vneighbors(v_id)
+    }
+
+    pub fn neighbor_function_edgegraph(&self) -> impl Fn(EdgeID) -> Vec<EdgeID> + '_ {
+        |e_id| self.outgoing(self.endpoints(e_id).1)
+    }
+
+    pub fn neighbor_function_edgepairgraph(
+        &self,
+    ) -> impl Fn((EdgeID, EdgeID)) -> Vec<(EdgeID, EdgeID)> + '_ {
+        |(_, to)| {
+            let next = self.twin(to);
+            self.edges(self.face(next))
+                .into_iter()
+                .filter(|&edge_id| edge_id != next)
+                .map(|next_to| (next, next_to))
+                .collect()
+        }
+    }
+
+    // Find the shortest path from element `a` to `b` using Dijkstra's algorithm.
+    // Neighborhood of a vertex is defined by `neighbor_function`, and the weight a pair elements is defined by `weight_function
+    pub fn find_shortest_path<T: std::cmp::Eq + std::hash::Hash + std::clone::Clone + Copy>(
+        &self,
+        a: T,
+        b: T,
+        neighbor_function: impl Fn(T) -> Vec<T>,
+        weight_function: impl Fn(T, T) -> OrderedFloat<f32>,
+        cache: &mut HashMap<T, Vec<(T, OrderedFloat<f32>)>>,
+    ) -> Option<(Vec<T>, OrderedFloat<f32>)> {
+        pathfinding::prelude::dijkstra(
+            &a,
+            |&elem| {
+                if cache.contains_key(&elem) {
+                    cache[&elem].clone()
+                } else {
+                    let neighbors = neighbor_function(elem)
+                        .iter()
+                        .map(|&neighbor| (neighbor, weight_function(elem, neighbor)))
+                        .collect_vec();
+                    cache.insert(elem, neighbors.clone());
+                    neighbors
+                }
+            },
+            |&elem| elem == b,
+        )
+    }
+
+    // Find the shortest cycle through element `a`, using the `find_shortest_path` function.
+    pub fn find_shortest_cycle<T: std::cmp::Eq + std::hash::Hash + std::clone::Clone + Copy>(
+        &self,
+        a: T,
+        neighbor_function: impl Fn(T) -> Vec<T>,
+        weight_function: impl Fn(T, T) -> OrderedFloat<f32>,
+        cache: &mut HashMap<T, Vec<(T, OrderedFloat<f32>)>>,
+    ) -> Option<(Vec<T>, OrderedFloat<f32>)> {
+        neighbor_function(a)
+            .iter()
+            .flat_map(|&neighbor| {
+                self.find_shortest_path(neighbor, a, &neighbor_function, &weight_function, cache)
+            })
+            .sorted_by(|(_, cost1), (_, cost2)| cost1.cmp(cost2))
+            .next()
+            .map(|(path, score)| ([vec![a], path].concat(), score))
+    }
 }
 
 // Construct a DCEL from a list of faces, where each face is a list of vertex indices.
@@ -504,12 +599,12 @@ impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
             mesh.edge_twin.insert(twin_id, edge_id);
         }
 
-        println!(
-            "Constructed valid douconel: |V|={}, |hE|={}, |F|={}, ",
-            mesh.verts.len(),
-            mesh.edges.len(),
-            mesh.faces.len()
-        );
+        // println!(
+        //     "Constructed valid douconel: |V|={}, |hE|={}, |F|={}, ",
+        //     mesh.verts.len(),
+        //     mesh.edges.len(),
+        //     mesh.faces.len()
+        // );
 
         Ok((mesh, vertex_pointers, face_pointers))
     }

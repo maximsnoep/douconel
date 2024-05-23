@@ -4,6 +4,8 @@ use crate::douconel::{Douconel, EdgeID, FaceID, FaceMap, VertID, VertMap};
 use glam::Vec3;
 use itertools::Itertools;
 use obj::Obj;
+use ordered_float::OrderedFloat;
+use rayon::vec;
 use simple_error::bail;
 use std::{error::Error, fs::OpenOptions};
 
@@ -240,5 +242,60 @@ impl<V: Default + HasPosition, E: Default, F: Default + HasNormal> Douconel<V, E
             .collect_vec();
 
         Self::from_embedded_faces(&faces, &vertex_positions, &face_normals)
+    }
+
+    // Weight function
+    pub fn weight_function_euclidean(&self) -> impl Fn(VertID, VertID) -> OrderedFloat<f32> + '_ {
+        |a, b| ordered_float::OrderedFloat(self.position(a).distance(self.position(b)))
+    }
+
+    // Weight function
+    pub fn weight_function_angle_edges(
+        &self,
+        slack: i32,
+    ) -> impl Fn(EdgeID, EdgeID) -> OrderedFloat<f32> + '_ {
+        move |a, b| {
+            ordered_float::OrderedFloat((self.vector(a).angle_between(self.vector(b))).powi(slack))
+        }
+    }
+
+    // Weight function
+    pub fn weight_function_angle_edgepairs(
+        &self,
+        slack: i32,
+    ) -> impl Fn((EdgeID, EdgeID), (EdgeID, EdgeID)) -> OrderedFloat<f32> + '_ {
+        move |a, b| {
+            let vector_a = self.midpoint(a.1) - self.midpoint(a.0);
+            let vector_b = self.midpoint(b.1) - self.midpoint(b.0);
+            ordered_float::OrderedFloat((vector_a.angle_between(vector_b)).powi(slack))
+        }
+    }
+
+    // Weight function
+    pub fn weight_function_angle_edgepairs_aligned(
+        &self,
+        angular_slack: i32,
+        alignment_slack: i32,
+        axis: Vec3,
+    ) -> impl Fn((EdgeID, EdgeID), (EdgeID, EdgeID)) -> OrderedFloat<f32> + '_ {
+        move |a, b| {
+            let vector_a = self.midpoint(a.1) - self.midpoint(a.0);
+            let vector_b = self.midpoint(b.1) - self.midpoint(b.0);
+            let normal_a = self.edge_normal(a.0);
+            let normal_b = self.edge_normal(b.0);
+
+            let cross_a = vector_a.cross(normal_a);
+            let cross_b = vector_b.cross(normal_b);
+
+            let angle_a = cross_a.angle_between(axis);
+            let angle_b = cross_b.angle_between(axis);
+
+            let angle_ab = vector_a.angle_between(vector_b);
+            let weight = angle_ab.powi(angular_slack)
+                + (angle_a).powi(alignment_slack)
+                + (angle_b).powi(alignment_slack);
+
+            ordered_float::OrderedFloat(weight)
+        }
     }
 }

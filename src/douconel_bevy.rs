@@ -32,7 +32,7 @@ impl<V: HasPosition, E, F: HasNormal> Douconel<V, E, F> {
                 vertex_colors.push(
                     color_map
                         .get(&face_id)
-                        .unwrap_or(&Color::PINK)
+                        .unwrap_or(&Color::BLACK)
                         .as_rgba_f32(),
                 );
             });
