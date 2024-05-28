@@ -9,13 +9,12 @@ mod tests {
     use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
     use crate::{
-        douconel::{Douconel, EdgeID, VertID},
+        douconel::{find_shortest_path, Douconel, EdgeID},
         douconel_embedded::{EmbeddedFace, EmbeddedVertex},
     };
     use itertools::Itertools;
     use ordered_float::OrderedFloat;
     use rand::seq::SliceRandom;
-    use slotmap::SecondaryMap;
 
     #[test]
     fn from_manual() {
@@ -184,10 +183,7 @@ mod tests {
             //     ITERATIONS,
             // );
 
-            let cache = Rc::new(RefCell::new(HashMap::<
-                EdgeID,
-                Vec<(EdgeID, OrderedFloat<f32>)>,
-            >::new()));
+            let mut cache = HashMap::<EdgeID, Vec<(EdgeID, OrderedFloat<f32>)>>::new();
 
             potpoursi::timer::bench(
                 || {
@@ -201,12 +197,12 @@ mod tests {
                         .collect_tuple()
                         .unwrap();
 
-                    let _ = douconel.find_shortest_path(
+                    let _ = find_shortest_path(
                         v_a,
                         v_b,
                         douconel.neighbor_function_edgegraph(),
                         douconel.weight_function_angle_edges(2),
-                        cache.clone(),
+                        &mut cache,
                     );
                 },
                 "edgegraph",
