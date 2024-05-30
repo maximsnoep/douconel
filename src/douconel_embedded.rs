@@ -1,22 +1,17 @@
-#![warn(clippy::all, clippy::pedantic, clippy::nursery, clippy::cargo)]
-
 use crate::douconel::{Douconel, EdgeID, FaceID, FaceMap, VertID, VertMap};
 use glam::Vec3;
 use itertools::Itertools;
-use obj::Obj;
 use ordered_float::OrderedFloat;
-use rayon::vec;
 use simple_error::bail;
-use std::{error::Error, fs::OpenOptions};
+use std::{
+    error::Error,
+    fs::{File, OpenOptions},
+    io::{BufRead, BufReader},
+};
 
 pub trait HasPosition {
     fn position(&self) -> Vec3;
     fn set_position(&mut self, position: Vec3);
-}
-
-pub trait HasNormal {
-    fn normal(&self) -> Vec3;
-    fn set_normal(&mut self, normal: Vec3);
 }
 
 // Embedded vertices (have a position)
@@ -107,31 +102,15 @@ impl<V: HasPosition, E, F> Douconel<V, E, F> {
         // 2PI - C
         2.0f32.mul_add(std::f32::consts::PI, -sum_of_angles)
     }
-}
 
-// Embedded faces (have a normal)
-#[derive(Default, Copy, Clone, Debug)]
-pub struct EmbeddedFace {
-    normal: Vec3,
-}
-
-impl HasNormal for EmbeddedFace {
-    fn normal(&self) -> Vec3 {
-        self.normal
-    }
-    fn set_normal(&mut self, normal: Vec3) {
-        self.normal = normal;
-    }
-}
-
-impl<V, E, F: HasNormal> Douconel<V, E, F> {
-    // Get normal of a given face.
+    // Get normal of a given face, assumes the face is planar. If the face is not planar, then this function will not return the correct normal.
+    // The normal is calculated as the cross product of two edges of the face; https://en.wikipedia.org/wiki/Normal_(geometry)
     #[must_use]
     pub fn normal(&self, id: FaceID) -> Vec3 {
-        self.faces
-            .get(id)
-            .unwrap_or_else(|| panic!("F:{id:?} not initialized"))
-            .normal()
+        let edges = self.edges(id);
+        let u = self.vector(edges[0]);
+        let v = self.vector(edges[1]);
+        u.cross(v).normalize()
     }
 
     // Get the average normals around a given vertex.
@@ -159,13 +138,11 @@ impl<V, E, F: HasNormal> Douconel<V, E, F> {
 }
 
 // Construct a DCEL with faces.
-// Embed vertices using positions.
-// Embed faces using normals.
-impl<V: Default + HasPosition, E: Default, F: Default + HasNormal> Douconel<V, E, F> {
+// Embed by vertex positions.
+impl<V: Default + HasPosition, E: Default, F: Default> Douconel<V, E, F> {
     pub fn from_embedded_faces(
         faces: &[Vec<usize>],
         vertex_positions: &[Vec3],
-        face_normals: &[Vec3],
     ) -> Result<(Self, VertMap, FaceMap), Box<dyn Error>> {
         let non_embedded = Self::from_faces(faces);
         if let Ok((mut douconel, vertex_map, face_map)) = non_embedded {
@@ -181,18 +158,6 @@ impl<V: Default + HasPosition, E: Default, F: Default + HasNormal> Douconel<V, E
                     .unwrap_or_else(|| panic!("V:{vertex_id:?} not initialized"))
                     .set_position(inp_vertex_position);
             }
-            for (inp_face_id, inp_face_normal) in face_normals.iter().copied().enumerate() {
-                let face_id = face_map
-                    .get_by_left(&inp_face_id)
-                    .copied()
-                    .unwrap_or_else(|| panic!("F:{inp_face_id} not initialized"));
-                douconel
-                    .faces
-                    .get_mut(face_id)
-                    .unwrap_or_else(|| panic!("F:{face_id:?} not initialized"))
-                    .set_normal(inp_face_normal);
-            }
-
             Ok((douconel, vertex_map, face_map))
         } else {
             bail!(non_embedded.err().unwrap())
@@ -205,43 +170,48 @@ impl<V: Default + HasPosition, E: Default, F: Default + HasNormal> Douconel<V, E
 
         let faces = stl.faces.iter().map(|f| f.vertices.to_vec()).collect_vec();
 
-        let vertex_positions = stl
+        let verts = stl
             .vertices
             .iter()
             .map(|v| Vec3::new(v[0], v[1], v[2]))
             .collect_vec();
-        let face_normals = stl
-            .faces
-            .iter()
-            .map(|f| Vec3::new(f.normal[0], f.normal[1], f.normal[2]))
-            .collect_vec();
 
-        Self::from_embedded_faces(&faces, &vertex_positions, &face_normals)
+        Self::from_embedded_faces(&faces, &verts)
     }
 
     // Read an OBJ file from `path`, and construct an embedded DCEL.
     pub fn from_obj(path: &str) -> Result<(Self, VertMap, FaceMap), Box<dyn Error>> {
-        let obj = Obj::load(path)?.data;
-        let mesh = obj.objects[0].groups[0].clone();
+        // Load the obj file
 
-        let faces = mesh
-            .polys
-            .iter()
-            .map(|w| vec![w.0[0].0, w.0[1].0, w.0[2].0])
-            .collect_vec();
-
-        let vertex_positions = obj
-            .position
-            .iter()
-            .map(|v| Vec3::new(v[0], v[1], v[2]))
-            .collect_vec();
-        let face_normals = obj
-            .normal
-            .iter()
-            .map(|n| Vec3::new(n[0], n[1], n[2]))
-            .collect_vec();
-
-        Self::from_embedded_faces(&faces, &vertex_positions, &face_normals)
+        // go through all lines of `path`
+        // for each line, check if it starts with "v" or "f"
+        // if it starts with "v", parse the line as a vertex
+        // if it starts with "f", parse the line as a face
+        // if it starts with anything else, ignore the line
+        // after going through all lines, construct the DCEL
+        let mut verts = vec![];
+        let mut faces = vec![];
+        let file = File::open(path)?;
+        let reader = BufReader::new(file);
+        for line in reader.lines() {
+            let line = line?;
+            if line.starts_with("v ") {
+                let vertex_position = line.split_whitespace().skip(1).collect_vec();
+                let x = vertex_position[0].parse::<f32>()?;
+                let y = vertex_position[1].parse::<f32>()?;
+                let z = vertex_position[2].parse::<f32>()?;
+                verts.push(Vec3::new(x, y, z));
+            } else if line.starts_with("f ") {
+                let face_vertices = line.split_whitespace().skip(1).collect_vec();
+                let mut face = vec![];
+                for vertex in face_vertices {
+                    let vertex_index = vertex.split('/').next().unwrap().parse::<usize>()? - 1;
+                    face.push(vertex_index);
+                }
+                faces.push(face);
+            }
+        }
+        Self::from_embedded_faces(&faces, &verts)
     }
 
     // Weight function
@@ -290,8 +260,7 @@ impl<V: Default + HasPosition, E: Default, F: Default + HasNormal> Douconel<V, E
             let angle_a = cross_a.angle_between(axis);
             let angle_b = cross_b.angle_between(axis);
 
-            let angle_ab = vector_a.angle_between(vector_b);
-            let weight = angle_ab.powi(angular_slack)
+            let weight = vector_a.angle_between(vector_b).powi(angular_slack)
                 + (angle_a).powi(alignment_slack)
                 + (angle_b).powi(alignment_slack);
 

@@ -16,7 +16,6 @@ priq = "0.1.0"
 ordered-float = "4.2.0"
 
 stl_io = "0.7.0"
-obj = "0.10.2"
 petgraph = "0.6.4"
 bevy_render = "0.12.1"
 pathfinding = "4.9.1"

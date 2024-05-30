@@ -1,5 +1,3 @@
-#![warn(clippy::all, clippy::pedantic, clippy::nursery, clippy::cargo)]
-
 use bimap::BiHashMap;
 use itertools::Itertools;
 use ordered_float::OrderedFloat;
@@ -8,11 +6,9 @@ use serde::{Deserialize, Serialize};
 use simple_error::bail;
 use slotmap::SecondaryMap;
 use slotmap::SlotMap;
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::Debug;
-use std::rc::Rc;
 
 slotmap::new_key_type! {
     pub struct VertID;
@@ -256,11 +252,10 @@ impl<V, E, F> Douconel<V, E, F> {
     // Returns the corner vertices of a given face.
     #[must_use]
     pub fn corners(&self, id: FaceID) -> Vec<VertID> {
-        let mut vertices = Vec::new();
-        for edge_id in self.edges(id) {
-            vertices.push(self.root(edge_id));
-        }
-        vertices
+        self.edges(id)
+            .into_iter()
+            .map(|edge_id| self.root(edge_id))
+            .collect()
     }
 
     // Returns the outgoing edges of a given vertex.
@@ -468,6 +463,9 @@ impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
         let mut endpoints_to_edges = HashMap::<(VertID, VertID), EdgeID>::new();
         for (inp_face_id, inp_face_edges) in faces.iter().enumerate() {
             let face_id = mesh.faces.insert(F::default());
+
+            println!("face: {inp_face_id:?} edges: {inp_face_edges:?}");
+
             face_pointers.insert(inp_face_id, face_id);
 
             let mut conc = inp_face_edges.clone();
@@ -495,28 +493,29 @@ impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
                 .collect_vec();
 
             let mut edge_ids = Vec::with_capacity(edges.len());
-
             for (start_vertex, end_vertex) in edges {
                 let edge_id = mesh.edges.insert(E::default());
 
-                vert_to_edge.insert(start_vertex, edge_id);
-                face_to_edge.insert(face_id, edge_id);
-
-                if endpoints_to_edges.contains_key(&(start_vertex, end_vertex)) {
+                if endpoints_to_edges
+                    .insert((start_vertex, end_vertex), edge_id)
+                    .is_some()
+                {
                     bail!("Edge for ({start_vertex:?}, {end_vertex:?}) already exists");
-                }
-                endpoints_to_edges.insert((start_vertex, end_vertex), edge_id);
+                };
 
                 mesh.edge_root.insert(edge_id, start_vertex);
                 mesh.edge_face.insert(edge_id, face_id);
-
+                vert_to_edge.insert(start_vertex, edge_id);
                 edge_ids.push(edge_id);
             }
+            face_to_edge.insert(face_id, *edge_ids.first().unwrap());
 
             // Linking each edge to its next edge in the face
-            edge_ids.push(edge_ids[0]); // Re-append the first to loop back
-            for (edge_a, edge_b) in edge_ids.into_iter().tuple_windows() {
-                mesh.edge_next.insert(edge_a, edge_b);
+            for edge_index in 0..edge_ids.len() {
+                mesh.edge_next.insert(
+                    edge_ids[edge_index],
+                    edge_ids[(edge_index + 1) % edge_ids.len()],
+                );
             }
         }
 
@@ -552,13 +551,6 @@ impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
             mesh.edge_twin.insert(edge_id, twin_id);
             mesh.edge_twin.insert(twin_id, edge_id);
         }
-
-        // println!(
-        //     "Constructed valid douconel: |V|={}, |hE|={}, |F|={}, ",
-        //     mesh.verts.len(),
-        //     mesh.edges.len(),
-        //     mesh.faces.len()
-        // );
 
         Ok((mesh, vertex_pointers, face_pointers))
     }
@@ -600,7 +592,7 @@ pub fn find_shortest_cycle<T: std::cmp::Eq + std::hash::Hash + std::clone::Clone
 ) -> Option<(Vec<T>, OrderedFloat<f32>)> {
     neighbor_function(a)
         .iter()
-        .flat_map(|&neighbor| {
+        .filter_map(|&neighbor| {
             find_shortest_path(neighbor, a, &neighbor_function, &weight_function, cache)
         })
         .sorted_by(|(_, cost1), (_, cost2)| cost1.cmp(cost2))

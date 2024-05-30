@@ -1,4 +1,3 @@
-#![warn(clippy::all, clippy::pedantic, clippy::nursery, clippy::cargo)]
 use crate::douconel::{Douconel, EdgeID, FaceID, VertID};
 use crate::douconel_embedded::HasPosition;
 use petgraph::graphmap::DiGraphMap;
