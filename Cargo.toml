@@ -5,18 +5,22 @@ edition = "2021"
 
 [dependencies]
 potpoursi = { path = "../potpoursi" }
-rand = "0.8.5"
-glam = "0.24.2"
-serde = "1.0.196"
-itertools = "0.12.1"
-simple-error = "0.3.0"
-slotmap = { version = "1.0.7", features = ["serde"] }
-bimap = "0.6.3"
-priq = "0.1.0"
-ordered-float = "4.2.0"
 
-stl_io = "0.7.0"
-petgraph = "0.6.4"
-bevy_render = "0.12.1"
-pathfinding = "4.9.1"
+# core
+itertools = "0.13.0"
+rand = "0.8.5"
+serde = "1.0.196"
+ordered-float = "4.2.0"
 rayon = "1.10.0"
+nalgebra = "0.32.5"
+thiserror = "1.0.29"
+approx = "0.5.1"
+
+slotmap = { version = "1.0.7", features = ["serde"] }
+bimap = "0.6.3" # for face and vertex maps
+
+# integrations
+stl_io = "0.7.0" # TODO: write own stl parser
+petgraph = "0.6.4"
+bevy = "0.12.1"
+pathfinding = "4.9.1"
