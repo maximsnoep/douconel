@@ -8,13 +8,7 @@ pub mod douconel_petgraph;
 #[cfg(test)]
 mod tests {
 
-    use crate::{
-        douconel::{Douconel, EdgeID},
-        douconel_embedded::EmbeddedVertex,
-    };
-    use itertools::Itertools;
-    use ordered_float::OrderedFloat;
-    use std::collections::HashMap;
+    use crate::{douconel::Douconel, douconel_embedded::EmbeddedVertex};
 
     #[test]
     fn from_manual() {
@@ -117,7 +111,7 @@ mod tests {
 
     //         const ITERATIONS: usize = 100;
 
-    //         // potpoursi::timer::bench(
+    //         // hutspot::timer::bench(
     //         //     || {
     //         //         let mut rng = rand::thread_rng();
     //         //         let (v_a, v_b) = verts
@@ -138,7 +132,7 @@ mod tests {
     //         //     ITERATIONS,
     //         // );
 
-    //         // potpoursi::timer::bench(
+    //         // hutspot::timer::bench(
     //         //     || {
     //         //         let mut rng = rand::thread_rng();
     //         //         let (v_a, v_b) = verts
@@ -169,7 +163,7 @@ mod tests {
     //         //     Vec<(VertID, OrderedFloat<f32>)>,
     //         // >::new()));
 
-    //         // potpoursi::timer::bench(
+    //         // hutspot::timer::bench(
     //         //     || {
     //         //         let mut rng = rand::thread_rng();
     //         //         let (v_a, v_b) = verts
@@ -188,7 +182,7 @@ mod tests {
 
     //         let mut cache = HashMap::<EdgeID, Vec<(EdgeID, OrderedFloat<f32>)>>::new();
 
-    //         // potpoursi::timer::bench(
+    //         // hutspot::timer::bench(
     //         //     || {
     //         //         let mut rng = rand::thread_rng();
     //         //         let (v_a, v_b) = douconel
@@ -217,7 +211,7 @@ mod tests {
     //         //     Vec<(VertID, OrderedFloat<f32>)>,
     //         // >::new()));
 
-    //         // potpoursi::timer::bench(
+    //         // hutspot::timer::bench(
     //         //     || {
     //         //         let mut rng = rand::thread_rng();
     //         //         let v_a = verts.choose(&mut rng).copied().unwrap();

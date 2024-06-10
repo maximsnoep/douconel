@@ -19,21 +19,25 @@ impl<V: Default + crate::douconel_embedded::HasPosition, E: Default, F: Default>
             let mut corners = self.corners(face_id);
 
             'outer: while corners.len() > 2 {
-                let cur_corners = corners.clone();
                 for i in 0..corners.len() {
                     let j = (i + 1) % corners.len();
                     let k = (i + 2) % corners.len();
 
-                    let u = self.position(corners[i]) - self.position(corners[j]);
-                    let v = self.position(corners[k]) - self.position(corners[j]);
+                    let a = self.position(corners[i]);
+                    let b = self.position(corners[j]);
+                    let c = self.position(corners[k]);
                     let n = self.normal(face_id);
 
-                    if u.cross(&v).dot(&n) < 0.
-                        && cur_corners.iter().all(|&corner| {
-                            corner == corners[i]
-                                || corner == corners[j]
-                                || corner == corners[k]
-                                || !potpoursi::math::inside_triangle(
+                    if hutspot::geom::calculate_orientation(a, b, c, n)
+                        == hutspot::geom::Orientation::CCW
+                        && corners
+                            .clone()
+                            .into_iter()
+                            .filter(|&corner| {
+                                corner != corners[i] && corner != corners[j] && corner != corners[k]
+                            })
+                            .all(|corner| {
+                                !hutspot::geom::is_point_inside_triangle(
                                     self.position(corner),
                                     (
                                         self.position(corners[i]),
@@ -41,7 +45,7 @@ impl<V: Default + crate::douconel_embedded::HasPosition, E: Default, F: Default>
                                         self.position(corners[k]),
                                     ),
                                 )
-                        })
+                            })
                     {
                         let triangle = [corners[i], corners[j], corners[k]];
                         for vertex_id in triangle {

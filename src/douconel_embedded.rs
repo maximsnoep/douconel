@@ -84,7 +84,7 @@ impl<V: Default + HasPosition, E: Default, F: Default> Douconel<V, E, F> {
                 let b = corners[1];
                 let c = corners[2];
                 for d in corners.into_iter().skip(3) {
-                    if !potpoursi::math::coplanar(
+                    if !hutspot::geom::are_points_coplanar(
                         douconel.position(a),
                         douconel.position(b),
                         douconel.position(c),
@@ -104,8 +104,8 @@ impl<V: Default + HasPosition, E: Default, F: Default> Douconel<V, E, F> {
                         let edge_a_end = douconel.position(douconel.toor(edge_a));
                         let edge_b_start = douconel.position(douconel.root(edge_b));
                         let edge_b_end = douconel.position(douconel.toor(edge_b));
-                        if let Some((_, potpoursi::math::IntersectionType::Proper)) =
-                            potpoursi::math::intersection_in_3d(
+                        if let Some((_, hutspot::geom::IntersectionType::Proper)) =
+                            hutspot::geom::calculate_3d_lineseg_intersection(
                                 edge_a_start,
                                 edge_a_end,
                                 edge_b_start,
@@ -221,7 +221,7 @@ impl<V: Default + HasPosition, E: Default, F: Default> Douconel<V, E, F> {
     // Be careful with concave faces, the centroid might lay outside the face.
     #[must_use]
     pub fn centroid(&self, face_id: FaceID) -> Vector3D {
-        potpoursi::math::average::<Vector3D, f64>(
+        hutspot::math::calculate_average_f64(
             self.edges(face_id)
                 .iter()
                 .map(|&edge_id| self.position(self.root(edge_id))),

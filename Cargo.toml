@@ -4,14 +4,13 @@ version = "0.0.1"
 edition = "2021"
 
 [dependencies]
-potpoursi = { path = "../potpoursi" }
+hutspot = { path = "../hutspot" }
 
 # core
 itertools = "0.13.0"
 rand = "0.8.5"
 serde = "1.0.196"
 ordered-float = "4.2.0"
-rayon = "1.10.0"
 nalgebra = "0.32.5"
 thiserror = "1.0.29"
 approx = "0.5.1"
@@ -21,6 +20,5 @@ bimap = "0.6.3" # for face and vertex maps
 
 # integrations
 stl_io = "0.7.0" # TODO: write own stl parser
-petgraph = "0.6.4"
+petgraph = "0.6.4" # may not be needed? write own functions + use pathfinding
 bevy = "0.12.1"
-pathfinding = "4.9.1"
