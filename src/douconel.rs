@@ -464,6 +464,20 @@ impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
         [self.face(id), self.face(self.twin(id))]
     }
 
+    // Returns the face with given vertices.
+    #[must_use]
+    pub fn face_with_verts(&self, verts: &[VertID]) -> Option<FaceID> {
+        for face_id in self.star(verts[0]) {
+            if verts
+                .iter()
+                .all(|&vert_id| self.star(vert_id).contains(&face_id))
+            {
+                return Some(face_id);
+            }
+        }
+        None
+    }
+
     // Returns the edge between the two vertices. Returns None if the vertices are not connected.
     #[must_use]
     pub fn edge_between_verts(&self, id_a: VertID, id_b: VertID) -> Option<(EdgeID, EdgeID)> {
