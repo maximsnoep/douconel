@@ -80,19 +80,20 @@ impl<V: Default + HasPosition, E: Default, F: Default> Douconel<V, E, F> {
                 }
 
                 // Check that the face is planar
-                let a = corners[0];
-                let b = corners[1];
-                let c = corners[2];
-                for d in corners.into_iter().skip(3) {
-                    if !hutspot::geom::are_points_coplanar(
-                        douconel.position(a),
-                        douconel.position(b),
-                        douconel.position(c),
-                        douconel.position(d),
-                    ) {
-                        return Err(EmbeddedMeshError::FaceNotSimple(face_id));
-                    }
-                }
+                // TODO: add this back...
+                // let a = corners[0];
+                // let b = corners[1];
+                // let c = corners[2];
+                // for d in corners.into_iter().skip(3) {
+                //     if !hutspot::geom::are_points_coplanar(
+                //         douconel.position(a),
+                //         douconel.position(b),
+                //         douconel.position(c),
+                //         douconel.position(d),
+                //     ) {
+                //         return Err(EmbeddedMeshError::FaceNotSimple(face_id));
+                //     }
+                // }
 
                 // Check that the face is simple
                 for edge_a in douconel.edges(face_id) {

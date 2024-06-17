@@ -14,6 +14,7 @@ impl<V: Default + crate::douconel_embedded::HasPosition, E: Default, F: Default>
         let mut vertex_positions = vec![];
         let mut vertex_normals = vec![];
         let mut vertex_colors = vec![];
+        let mut vertex_uvs = vec![];
 
         for face_id in self.faces.keys() {
             let mut corners = self.corners(face_id);
@@ -63,6 +64,7 @@ impl<V: Default + crate::douconel_embedded::HasPosition, E: Default, F: Default>
                             ));
                             let color = color_map.get(&face_id).unwrap_or(&[0., 0., 0.]);
                             vertex_colors.push([color[0], color[1], color[2], 1.]);
+                            vertex_uvs.push([0., 0.]);
                         }
 
                         corners.remove(j);
@@ -70,8 +72,6 @@ impl<V: Default + crate::douconel_embedded::HasPosition, E: Default, F: Default>
                     }
                 }
             }
-
-            // for vertex_id in triangles.into_iter().flatten() {}
         }
 
         BevyMesh::new(bevy::render::render_resource::PrimitiveTopology::TriangleList)
@@ -81,5 +81,6 @@ impl<V: Default + crate::douconel_embedded::HasPosition, E: Default, F: Default>
             .with_inserted_attribute(BevyMesh::ATTRIBUTE_POSITION, vertex_positions)
             .with_inserted_attribute(BevyMesh::ATTRIBUTE_NORMAL, vertex_normals)
             .with_inserted_attribute(BevyMesh::ATTRIBUTE_COLOR, vertex_colors)
+            .with_inserted_attribute(BevyMesh::ATTRIBUTE_UV_0, vertex_uvs)
     }
 }
