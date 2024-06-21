@@ -357,15 +357,15 @@ impl<V: Default + HasPosition, E: Default, F: Default> Douconel<V, E, F> {
         angular_slack: i32,
         alignment_slack: i32,
         axis: Vector3D,
-    ) -> impl Fn((EdgeID, EdgeID), (EdgeID, EdgeID)) -> OrderedFloat<Float> + '_ {
+    ) -> impl Fn([EdgeID; 2], [EdgeID; 2]) -> OrderedFloat<Float> + '_ {
         move |a, b| {
-            let vector_a = self.midpoint(a.1) - self.midpoint(a.0);
-            let vector_b = self.midpoint(b.1) - self.midpoint(b.0);
+            let vector_a = self.midpoint(a[1]) - self.midpoint(a[0]);
+            let vector_b = self.midpoint(b[1]) - self.midpoint(b[0]);
 
             let weight = self.vec_angle(vector_a, vector_b).powi(angular_slack)
-                + (self.vec_angle(vector_a.cross(&self.edge_normal(a.0)), axis))
+                + (self.vec_angle(vector_a.cross(&self.edge_normal(a[0])), axis))
                     .powi(alignment_slack)
-                + (self.vec_angle(vector_b.cross(&self.edge_normal(b.0)), axis))
+                + (self.vec_angle(vector_b.cross(&self.edge_normal(b[0])), axis))
                     .powi(alignment_slack);
 
             OrderedFloat(weight)

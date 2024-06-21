@@ -576,15 +576,13 @@ impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
         |e_id| self.outgoing(self.endpoints(e_id).1)
     }
 
-    pub fn neighbor_function_edgepairgraph(
-        &self,
-    ) -> impl Fn((EdgeID, EdgeID)) -> Vec<(EdgeID, EdgeID)> + '_ {
-        |(_, to)| {
+    pub fn neighbor_function_edgepairgraph(&self) -> impl Fn([EdgeID; 2]) -> Vec<[EdgeID; 2]> + '_ {
+        |[_, to]| {
             let next = self.twin(to);
             self.edges(self.face(next))
                 .into_iter()
                 .filter(|&edge_id| edge_id != next)
-                .map(|next_to| (next, next_to))
+                .map(|next_to| [next, next_to])
                 .collect()
         }
     }
