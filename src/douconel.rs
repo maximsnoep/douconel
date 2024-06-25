@@ -423,16 +423,16 @@ impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
             .collect()
     }
 
-    // Returns the outgoing edges of a given vertex.
+    // Returns the outgoing edges of a given vertex. (CLOCKWISE OR COUNTERCLOCKWISE?)
     #[must_use]
     pub fn outgoing(&self, id: VertID) -> Vec<EdgeID> {
         let mut edges = vec![self.vrep(id)];
         loop {
-            let twin = self.twin(edges.last().copied().unwrap());
-            if edges.contains(&self.next(twin)) {
+            let next_of_twin = self.next(self.twin(edges.last().copied().unwrap()));
+            if edges.contains(&next_of_twin) {
                 return edges;
             }
-            edges.push(self.next(twin));
+            edges.push(next_of_twin);
         }
     }
 
