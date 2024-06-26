@@ -207,12 +207,7 @@ impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
         }
 
         // 4. Make sure the mesh is connected.
-        if hutspot::graph::find_ccs(&mesh.verts.keys().collect_vec(), |vert_id| {
-            mesh.vneighbors(vert_id)
-        })
-        .len()
-            > 1
-        {
+        if !mesh.is_connected() {
             return Err(MeshError::NotConnected);
         }
 
@@ -230,7 +225,7 @@ impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
     // Asserts that all elements have their required properties set.
     // These assertions should all pass per construction.
     pub fn assert_properties(&self) {
-        for edge_id in self.edges.keys() {
+        for edge_id in self.edge_ids() {
             assert!(
                 self.edge_root.contains_key(edge_id),
                 "{edge_id} has no root"
@@ -248,10 +243,10 @@ impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
                 "{edge_id} has no twin"
             );
         }
-        for vert_id in self.verts.keys() {
+        for vert_id in self.vert_ids() {
             assert!(self.vert_rep.contains_key(vert_id), "{vert_id} has no vrep");
         }
-        for face_id in self.faces.keys() {
+        for face_id in self.face_ids() {
             assert!(self.face_rep.contains_key(face_id), "{face_id} has no frep");
         }
     }
@@ -259,7 +254,7 @@ impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
     // Asserts that all references between elements are valid.
     // These assertions should all pass per construction.
     pub fn assert_references(&self) {
-        for edge_id in self.edges.keys() {
+        for edge_id in self.edge_ids() {
             let root_id = self.root(edge_id);
             assert!(
                 self.verts.contains_key(root_id),
@@ -284,14 +279,14 @@ impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
                 "{edge_id} has non-existing twin ({twin_id})"
             );
         }
-        for vert_id in self.verts.keys() {
+        for vert_id in self.vert_ids() {
             let rep_id = self.vert_rep[vert_id];
             assert!(
                 self.edges.contains_key(rep_id),
                 "{vert_id} has non-existing vrep ({rep_id})"
             );
         }
-        for face_id in self.faces.keys() {
+        for face_id in self.face_ids() {
             let rep_id = self.face_rep[face_id];
             assert!(
                 self.edges.contains_key(rep_id),
@@ -303,21 +298,21 @@ impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
     // Asserts the invariants of the DCEL structure.
     pub fn assert_invariants(&self) {
         // this->twin->twin == this
-        for edge_id in self.edges.keys() {
+        for edge_id in self.edge_ids() {
             assert!(
                 self.twin(self.twin(edge_id)) == edge_id,
                 "{edge_id}: [this->twin->twin == this] violated"
             );
         }
         // this->twin->next->root == this->root
-        for edge_id in self.edges.keys() {
+        for edge_id in self.edge_ids() {
             assert!(
                 self.root(self.next(self.twin(edge_id))) == self.root(edge_id),
                 "{edge_id}: [this->twin->next->root == this->root] violated"
             );
         }
         // this->next->face == this->face
-        for edge_id in self.edges.keys() {
+        for edge_id in self.edge_ids() {
             assert!(
                 self.face(self.next(edge_id)) == self.face(edge_id),
                 "{edge_id}: [this->next->face == this->face] violated"
@@ -325,7 +320,7 @@ impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
         }
         // this->next->...->next == this
         const MAX_FACE_SIZE: usize = 10;
-        for edge_id in self.edges.keys() {
+        for edge_id in self.edge_ids() {
             let mut next_id = edge_id;
             for _ in 0..MAX_FACE_SIZE {
                 next_id = self.next(next_id);
@@ -397,6 +392,18 @@ impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
             .unwrap_or_else(|| panic!("{id} has no next"))
     }
 
+    pub fn nexts(&self, id: EdgeID) -> Vec<EdgeID> {
+        let mut nexts = vec![];
+        let mut cur = id;
+        loop {
+            cur = self.next(cur);
+            if cur == id {
+                return nexts;
+            }
+            nexts.push(cur);
+        }
+    }
+
     // Returns the face of the given edge.
     // Panics if the edge has no face defined or if the face does not exist.
     #[must_use]
@@ -439,14 +446,7 @@ impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
     // Returns the edges of a given face.
     #[must_use]
     pub fn edges(&self, id: FaceID) -> Vec<EdgeID> {
-        let mut edges = vec![self.frep(id)];
-        loop {
-            let next = self.next(edges.last().copied().unwrap());
-            if next == self.frep(id) {
-                return edges;
-            }
-            edges.push(next);
-        }
+        [vec![self.frep(id)], self.nexts(self.frep(id))].concat()
     }
 
     // Returns the faces around a given vertex.
@@ -544,6 +544,21 @@ impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
         self.faces.len()
     }
 
+    #[must_use]
+    pub fn vert_ids(&self) -> Vec<VertID> {
+        self.verts.keys().collect()
+    }
+
+    #[must_use]
+    pub fn edge_ids(&self) -> Vec<EdgeID> {
+        self.edges.keys().collect()
+    }
+
+    #[must_use]
+    pub fn face_ids(&self) -> Vec<FaceID> {
+        self.faces.keys().collect()
+    }
+
     // Return `n` random vertices.
     #[must_use]
     pub fn random_verts(&self, n: usize) -> Vec<VertID> {
@@ -585,5 +600,9 @@ impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
                 .map(|next_to| [next, next_to])
                 .collect()
         }
+    }
+
+    pub fn is_connected(&self) -> bool {
+        hutspot::graph::find_ccs(&self.vert_ids(), self.neighbor_function_primal()).len() == 1
     }
 }
