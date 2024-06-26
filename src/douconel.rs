@@ -481,10 +481,8 @@ impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
     // Returns the edge between the two vertices. Returns None if the vertices are not connected.
     #[must_use]
     pub fn edge_between_verts(&self, id_a: VertID, id_b: VertID) -> Option<(EdgeID, EdgeID)> {
-        let edges_a = self.outgoing(id_a);
-        let edges_b = self.outgoing(id_b);
-        for &edge_a_id in &edges_a {
-            for &edge_b_id in &edges_b {
+        for &edge_a_id in &self.outgoing(id_a) {
+            for &edge_b_id in &self.outgoing(id_b) {
                 if self.twin(edge_a_id) == edge_b_id {
                     return Some((edge_a_id, edge_b_id));
                 }
