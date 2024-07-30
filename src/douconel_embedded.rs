@@ -1,9 +1,11 @@
 use crate::douconel::{Douconel, EdgeID, FaceID, FaceMap, MeshError, VertID, VertMap};
 use itertools::Itertools;
 use ordered_float::OrderedFloat;
+use serde::{Deserialize, Serialize};
 use std::{
-    fs::File,
+    fs::OpenOptions,
     io::{BufRead, BufReader},
+    path::PathBuf,
 };
 use thiserror::Error;
 
@@ -29,7 +31,7 @@ pub trait HasPosition {
 }
 
 // Embedded vertices (have a position)
-#[derive(Default, Copy, Clone, Debug)]
+#[derive(Default, Copy, Clone, Debug, Serialize, Deserialize)]
 pub struct EmbeddedVertex {
     position: Vector3D,
 }
@@ -80,20 +82,19 @@ impl<V: Default + HasPosition, E: Default, F: Default> Douconel<V, E, F> {
                 }
 
                 // Check that the face is planar
-                // TODO: add this back...
-                // let a = corners[0];
-                // let b = corners[1];
-                // let c = corners[2];
-                // for d in corners.into_iter().skip(3) {
-                //     if !hutspot::geom::are_points_coplanar(
-                //         douconel.position(a),
-                //         douconel.position(b),
-                //         douconel.position(c),
-                //         douconel.position(d),
-                //     ) {
-                //         return Err(EmbeddedMeshError::FaceNotSimple(face_id));
-                //     }
-                // }
+                let a = corners[0];
+                let b = corners[1];
+                let c = corners[2];
+                for d in corners.into_iter().skip(3) {
+                    if !hutspot::geom::are_points_coplanar(
+                        douconel.position(a),
+                        douconel.position(b),
+                        douconel.position(c),
+                        douconel.position(d),
+                    ) {
+                        return Err(EmbeddedMeshError::FaceNotSimple(face_id));
+                    }
+                }
 
                 // Check that the face is simple
                 for edge_a in douconel.edges(face_id) {
@@ -101,17 +102,12 @@ impl<V: Default + HasPosition, E: Default, F: Default> Douconel<V, E, F> {
                         if edge_a == edge_b {
                             continue;
                         }
-                        let edge_a_start = douconel.position(douconel.root(edge_a));
-                        let edge_a_end = douconel.position(douconel.toor(edge_a));
-                        let edge_b_start = douconel.position(douconel.root(edge_b));
-                        let edge_b_end = douconel.position(douconel.toor(edge_b));
+                        let a_u = douconel.position(douconel.root(edge_a));
+                        let a_v = douconel.position(douconel.toor(edge_a));
+                        let b_u = douconel.position(douconel.root(edge_b));
+                        let b_v = douconel.position(douconel.toor(edge_b));
                         if let Some((_, hutspot::geom::IntersectionType::Proper)) =
-                            hutspot::geom::calculate_3d_lineseg_intersection(
-                                edge_a_start,
-                                edge_a_end,
-                                edge_b_start,
-                                edge_b_end,
-                            )
+                            hutspot::geom::calculate_3d_lineseg_intersection(a_u, a_v, b_u, b_v)
                         {
                             return Err(EmbeddedMeshError::FaceNotSimple(face_id));
                         }
@@ -125,86 +121,58 @@ impl<V: Default + HasPosition, E: Default, F: Default> Douconel<V, E, F> {
         }
     }
 
-    // // Read an STL file from `path`, and construct an embedded DCEL.
-    // // Todo: Write own parser, to avoid dependency on stl_io.
-    // pub fn from_stl(path: &str) -> Result<(Self, VertMap, FaceMap), Box<dyn Error>> {
-    //     let stl = stl_io::read_stl(&mut OpenOptions::new().read(true).open(path)?)?;
+    pub fn obj_to_elements(
+        reader: impl BufRead,
+    ) -> Result<(Vec<Vector3D>, Vec<Vec<usize>>), obj::ObjError> {
+        let obj = obj::ObjData::load_buf(reader)?;
+        let verts = obj
+            .position
+            .iter()
+            .map(|v| Vector3D::new(v[0].into(), v[1].into(), v[2].into()))
+            .collect_vec();
+        let faces = obj.objects[0].groups[0]
+            .polys
+            .iter()
+            .map(|f| f.0.iter().map(|v| v.0).collect_vec())
+            .collect_vec();
+        Ok((verts, faces))
+    }
 
-    //     let faces = stl.faces.iter().map(|f| f.vertices.to_vec()).collect_vec();
+    pub fn stl_to_elements(
+        mut reader: impl BufRead + std::io::Seek,
+    ) -> Result<(Vec<Vector3D>, Vec<Vec<usize>>), std::io::Error> {
+        let stl = stl_io::read_stl(&mut reader)?;
+        let verts = stl
+            .vertices
+            .iter()
+            .map(|v| Vector3D::new(v[0].into(), v[1].into(), v[2].into()))
+            .collect_vec();
+        let faces = stl.faces.iter().map(|f| f.vertices.to_vec()).collect_vec();
+        Ok((verts, faces))
+    }
 
-    //     let verts = stl
-    //         .vertices
-    //         .iter()
-    //         .map(|v| Vector3D::new(v[0], v[1], v[2]))
-    //         .collect_vec();
-
-    //     Self::from_embedded_faces(&faces, &verts)
-    // }
-
-    // Read an OBJ file from `path`, and construct an embedded DCEL.
-    pub fn from_obj(path: &str) -> Result<(Self, VertMap, FaceMap), EmbeddedMeshError> {
-        // Load the obj file
-
-        // go through all lines of `path`
-        // for each line, check if it starts with "v" or "f"
-        // if it starts with "v", parse the line as a vertex
-        // if it starts with "f", parse the line as a face
-        // if it starts with anything else, ignore the line
-        // after going through all lines, construct the DCEL
-        let mut verts = vec![];
-        let mut faces = vec![];
-        match File::open(path) {
-            Ok(file) => {
-                let reader = BufReader::new(file);
-                for line in reader.lines() {
-                    match line {
-                        Ok(line) => {
-                            if line.starts_with("v ") {
-                                let vertex_position = line.split_whitespace().skip(1).collect_vec();
-                                match (
-                                    vertex_position[0].parse::<Float>(),
-                                    vertex_position[1].parse::<Float>(),
-                                    vertex_position[2].parse::<Float>(),
-                                ) {
-                                    (Ok(x), Ok(y), Ok(z)) => {
-                                        verts.push(Vector3D::new(x, y, z));
-                                    }
-                                    (Err(e), _, _) | (_, Err(e), _) | (_, _, Err(e)) => {
-                                        return Err(EmbeddedMeshError::MeshError(
-                                            MeshError::Unknown(e.to_string()),
-                                        ));
-                                    }
-                                }
-                            } else if line.starts_with("f ") {
-                                let face_vertices = line.split_whitespace().skip(1).collect_vec();
-                                let mut face = vec![];
-                                for vertex in face_vertices {
-                                    match vertex.split('/').next().unwrap().parse::<usize>() {
-                                        Ok(vertex_index) => {
-                                            face.push(vertex_index - 1);
-                                        }
-                                        Err(e) => {
-                                            return Err(EmbeddedMeshError::MeshError(
-                                                MeshError::Unknown(e.to_string()),
-                                            ));
-                                        }
-                                    }
-                                }
-                                faces.push(face);
-                            }
-                        }
-                        Err(e) => {
-                            return Err(EmbeddedMeshError::MeshError(MeshError::Unknown(
-                                e.to_string(),
-                            )));
-                        }
-                    }
-                }
-                Ok(Self::from_embedded_faces(&faces, &verts)?)
-            }
-            Err(e) => Err(EmbeddedMeshError::MeshError(MeshError::Unknown(
-                e.to_string(),
-            ))),
+    pub fn from_file(path: &PathBuf) -> Result<(Self, VertMap, FaceMap), EmbeddedMeshError> {
+        match OpenOptions::new().read(true).open(path) {
+            Ok(file) => match path.extension().unwrap().to_str() {
+                Some("obj") => match Self::obj_to_elements(BufReader::new(file)) {
+                    Ok((verts, faces)) => Self::from_embedded_faces(&faces, &verts),
+                    Err(e) => Err(EmbeddedMeshError::MeshError(MeshError::Unknown(format!(
+                        "Something went wrong while reading the OBJ file: {path:?}\nErr: {e}"
+                    )))),
+                },
+                Some("stl") => match Self::stl_to_elements(BufReader::new(file)) {
+                    Ok((verts, faces)) => Self::from_embedded_faces(&faces, &verts),
+                    Err(e) => Err(EmbeddedMeshError::MeshError(MeshError::Unknown(format!(
+                        "Something went wrong while reading the STL file: {path:?}\nErr: {e}"
+                    )))),
+                },
+                _ => Err(EmbeddedMeshError::MeshError(MeshError::Unknown(format!(
+                    "Unknown file extension: {path:?}",
+                )))),
+            },
+            Err(e) => Err(EmbeddedMeshError::MeshError(MeshError::Unknown(format!(
+                "Cannot read file: {path:?}\nErr: {e}"
+            )))),
         }
     }
 

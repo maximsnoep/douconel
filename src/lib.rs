@@ -7,13 +7,17 @@ pub mod douconel_petgraph;
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
 
-    use crate::{douconel::Douconel, douconel_embedded::EmbeddedVertex};
+    use crate::{
+        douconel::{Douconel, Empty},
+        douconel_embedded::EmbeddedVertex,
+    };
 
     #[test]
     fn from_manual() {
         let faces = vec![vec![0, 2, 1], vec![0, 1, 3], vec![1, 2, 3], vec![0, 3, 2]];
-        let douconel = Douconel::<(), (), ()>::from_faces(&faces);
+        let douconel = Douconel::<Empty, Empty, Empty>::from_faces(&faces);
         assert!(douconel.is_ok(), "{douconel:?}");
         if let Ok((douconel, _, _)) = douconel {
             assert!(douconel.nr_verts() == 4);
@@ -26,28 +30,10 @@ mod tests {
         }
     }
 
-    // #[test]
-    // fn from_blub_stl() {
-    //     let douconel = Douconel::<EmbeddedVertex, (), ()>::from_stl("assets/blub001k.stl");
-    //     assert!(douconel.is_ok(), "{douconel:?}");
-    //     if let Ok((douconel, _, _)) = douconel {
-    //         assert!(douconel.nr_verts() == 945);
-    //         assert!(douconel.nr_edges() == 2829 * 2);
-    //         assert!(douconel.nr_faces() == 1886);
-
-    //         assert!(douconel.verify_properties().is_ok());
-    //         assert!(douconel.verify_references().is_ok());
-    //         assert!(douconel.verify_invariants().is_ok());
-
-    //         for face_id in douconel.faces.keys() {
-    //             assert!(douconel.corners(face_id).len() == 3);
-    //         }
-    //     }
-    // }
-
     #[test]
-    fn from_blub_obj() {
-        let douconel = Douconel::<EmbeddedVertex, (), ()>::from_obj("assets/blub001k.obj");
+    fn from_blub_stl() {
+        let douconel =
+            Douconel::<EmbeddedVertex, (), ()>::from_file(&PathBuf::from("assets/blub001k.stl"));
         assert!(douconel.is_ok(), "{douconel:?}");
         if let Ok((douconel, _, _)) = douconel {
             assert!(douconel.nr_verts() == 945);
@@ -61,8 +47,44 @@ mod tests {
     }
 
     #[test]
+    fn from_blub_obj() {
+        let douconel = Douconel::<EmbeddedVertex, Empty, Empty>::from_file(&PathBuf::from(
+            "assets/blub001k.obj",
+        ));
+        assert!(douconel.is_ok(), "{douconel:?}");
+        if let Ok((douconel, _, _)) = douconel {
+            assert!(douconel.nr_verts() == 945);
+            assert!(douconel.nr_edges() == 2829 * 2);
+            assert!(douconel.nr_faces() == 1886);
+
+            for face_id in douconel.faces.keys() {
+                assert!(douconel.corners(face_id).len() == 3);
+            }
+        }
+    }
+
+    #[test]
+    fn from_nefertiti_stl() {
+        let douconel = Douconel::<EmbeddedVertex, (), ()>::from_file(&PathBuf::from(
+            "assets/nefertiti099k.stl",
+        ));
+        assert!(douconel.is_ok(), "{douconel:?}");
+        if let Ok((douconel, _, _)) = douconel {
+            assert!(douconel.nr_verts() == 49971);
+            assert!(douconel.nr_edges() == 149_907 * 2);
+            assert!(douconel.nr_faces() == 99938);
+
+            for face_id in douconel.faces.keys() {
+                assert!(douconel.corners(face_id).len() == 3);
+            }
+        }
+    }
+
+    #[test]
     fn from_hexahedron_obj() {
-        let douconel = Douconel::<EmbeddedVertex, (), ()>::from_obj("assets/hexahedron.obj");
+        let douconel = Douconel::<EmbeddedVertex, Empty, Empty>::from_file(&PathBuf::from(
+            "assets/hexahedron.obj",
+        ));
         assert!(douconel.is_ok(), "{douconel:?}");
         if let Ok((douconel, _, _)) = douconel {
             assert!(douconel.nr_verts() == 8);
@@ -77,7 +99,9 @@ mod tests {
 
     #[test]
     fn from_tetrahedron_obj() {
-        let douconel = Douconel::<EmbeddedVertex, (), ()>::from_obj("assets/tetrahedron.obj");
+        let douconel = Douconel::<EmbeddedVertex, Empty, Empty>::from_file(&PathBuf::from(
+            "assets/tetrahedron.obj",
+        ));
         assert!(douconel.is_ok(), "{douconel:?}");
         if let Ok((douconel, _, _)) = douconel {
             assert!(douconel.nr_verts() == 4);
@@ -86,6 +110,35 @@ mod tests {
 
             for face_id in douconel.faces.keys() {
                 assert!(douconel.corners(face_id).len() == 3);
+            }
+        }
+    }
+
+    #[test]
+    fn serialize() {
+        let douconel = Douconel::<EmbeddedVertex, Empty, Empty>::from_file(&PathBuf::from(
+            "assets/nefertiti099k.stl",
+        ));
+
+        assert!(douconel.is_ok(), "{douconel:?}");
+        if let Ok((douconel, _, _)) = douconel {
+            println!("{:?}", douconel.verts);
+
+            let serialized = serde_json::to_string(&douconel);
+            assert!(serialized.is_ok(), "{:?}", serialized.unwrap());
+
+            println!("{serialized:?}");
+
+            if let Ok(serialized) = serialized {
+                let deserialized =
+                    serde_json::from_str::<Douconel<EmbeddedVertex, u8, u8>>(&serialized);
+
+                assert!(deserialized.is_ok(), "{deserialized:?}");
+                if let Ok(deserialized) = deserialized {
+                    assert!(douconel.nr_verts() == deserialized.nr_verts());
+                    assert!(douconel.nr_edges() == deserialized.nr_edges());
+                    assert!(douconel.nr_faces() == deserialized.nr_faces());
+                }
             }
         }
     }

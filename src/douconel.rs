@@ -49,6 +49,8 @@ pub enum MeshError {
     Unknown(String),
 }
 
+pub type Empty = u8;
+
 pub type FaceMap = BiHashMap<usize, FaceID>;
 pub type VertMap = BiHashMap<usize, VertID>;
 
@@ -64,7 +66,6 @@ pub struct Douconel<V, E, F> {
     pub verts: SlotMap<VertID, V>,
     pub edges: SlotMap<EdgeID, E>,
     pub faces: SlotMap<FaceID, F>,
-    pub edgepairs: SlotMap<EdgePairID, (EdgeID, EdgeID)>,
 
     edge_root: SecondaryMap<EdgeID, VertID>,
     edge_face: SecondaryMap<EdgeID, FaceID>,
@@ -83,7 +84,6 @@ impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
             verts: SlotMap::with_key(),
             edges: SlotMap::with_key(),
             faces: SlotMap::with_key(),
-            edgepairs: SlotMap::with_key(),
             edge_root: SecondaryMap::new(),
             edge_face: SecondaryMap::new(),
             edge_next: SecondaryMap::new(),
@@ -154,15 +154,11 @@ impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
                         vertex_pointers
                             .get_by_left(inp_start_vertex)
                             .copied()
-                            .unwrap_or_else(|| {
-                                panic!("V:{inp_start_vertex} does not have a vertex pointer")
-                            }),
+                            .unwrap_or_else(|| panic!("V:{inp_start_vertex} does not have a vertex pointer")),
                         vertex_pointers
                             .get_by_left(inp_end_vertex)
                             .copied()
-                            .unwrap_or_else(|| {
-                                panic!("V:{inp_end_vertex} does not have a vertex pointer")
-                            }),
+                            .unwrap_or_else(|| panic!("V:{inp_end_vertex} does not have a vertex pointer")),
                     )
                 })
                 .collect_vec();
@@ -171,10 +167,7 @@ impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
             for (start_vertex, end_vertex) in edges {
                 let edge_id = mesh.edges.insert(E::default());
 
-                if endpoints_to_edges
-                    .insert((start_vertex, end_vertex), edge_id)
-                    .is_some()
-                {
+                if endpoints_to_edges.insert((start_vertex, end_vertex), edge_id).is_some() {
                     return Err(MeshError::DuplicateEdge(start_vertex, end_vertex));
                 };
 
@@ -187,10 +180,7 @@ impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
 
             // Linking each edge to its next edge in the face
             for edge_index in 0..edge_ids.len() {
-                mesh.edge_next.insert(
-                    edge_ids[edge_index],
-                    edge_ids[(edge_index + 1) % edge_ids.len()],
-                );
+                mesh.edge_next.insert(edge_ids[edge_index], edge_ids[(edge_index + 1) % edge_ids.len()]);
             }
         }
 
@@ -226,22 +216,10 @@ impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
     // These assertions should all pass per construction.
     pub fn assert_properties(&self) {
         for edge_id in self.edge_ids() {
-            assert!(
-                self.edge_root.contains_key(edge_id),
-                "{edge_id} has no root"
-            );
-            assert!(
-                self.edge_face.contains_key(edge_id),
-                "{edge_id} has no face"
-            );
-            assert!(
-                self.edge_next.contains_key(edge_id),
-                "{edge_id} has no next"
-            );
-            assert!(
-                self.edge_twin.contains_key(edge_id),
-                "{edge_id} has no twin"
-            );
+            assert!(self.edge_root.contains_key(edge_id), "{edge_id} has no root");
+            assert!(self.edge_face.contains_key(edge_id), "{edge_id} has no face");
+            assert!(self.edge_next.contains_key(edge_id), "{edge_id} has no next");
+            assert!(self.edge_twin.contains_key(edge_id), "{edge_id} has no twin");
         }
         for vert_id in self.vert_ids() {
             assert!(self.vert_rep.contains_key(vert_id), "{vert_id} has no vrep");
@@ -256,42 +234,24 @@ impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
     pub fn assert_references(&self) {
         for edge_id in self.edge_ids() {
             let root_id = self.root(edge_id);
-            assert!(
-                self.verts.contains_key(root_id),
-                "{edge_id} has non-existing root ({root_id})"
-            );
+            assert!(self.verts.contains_key(root_id), "{edge_id} has non-existing root ({root_id})");
 
             let face_id = self.face(edge_id);
-            assert!(
-                self.faces.contains_key(face_id),
-                "{edge_id} has non-existing face ({face_id})"
-            );
+            assert!(self.faces.contains_key(face_id), "{edge_id} has non-existing face ({face_id})");
 
             let next_id = self.next(edge_id);
-            assert!(
-                self.edges.contains_key(next_id),
-                "{edge_id} has non-existing next ({next_id})"
-            );
+            assert!(self.edges.contains_key(next_id), "{edge_id} has non-existing next ({next_id})");
 
             let twin_id = self.twin(edge_id);
-            assert!(
-                self.edges.contains_key(twin_id),
-                "{edge_id} has non-existing twin ({twin_id})"
-            );
+            assert!(self.edges.contains_key(twin_id), "{edge_id} has non-existing twin ({twin_id})");
         }
         for vert_id in self.vert_ids() {
             let rep_id = self.vert_rep[vert_id];
-            assert!(
-                self.edges.contains_key(rep_id),
-                "{vert_id} has non-existing vrep ({rep_id})"
-            );
+            assert!(self.edges.contains_key(rep_id), "{vert_id} has non-existing vrep ({rep_id})");
         }
         for face_id in self.face_ids() {
             let rep_id = self.face_rep[face_id];
-            assert!(
-                self.edges.contains_key(rep_id),
-                "{face_id} has non-existing frep ({rep_id})"
-            );
+            assert!(self.edges.contains_key(rep_id), "{face_id} has non-existing frep ({rep_id})");
         }
     }
 
@@ -299,10 +259,7 @@ impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
     pub fn assert_invariants(&self) {
         // this->twin->twin == this
         for edge_id in self.edge_ids() {
-            assert!(
-                self.twin(self.twin(edge_id)) == edge_id,
-                "{edge_id}: [this->twin->twin == this] violated"
-            );
+            assert!(self.twin(self.twin(edge_id)) == edge_id, "{edge_id}: [this->twin->twin == this] violated");
         }
         // this->twin->next->root == this->root
         for edge_id in self.edge_ids() {
@@ -328,10 +285,7 @@ impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
                     break;
                 }
             }
-            assert!(
-                next_id == edge_id,
-                "{edge_id}: [this->next->...->next == this] violated"
-            );
+            assert!(next_id == edge_id, "{edge_id}: [this->next->...->next == this] violated");
         }
     }
 
@@ -339,30 +293,21 @@ impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
     // Panics if the vertex has no representative edge defined.
     #[must_use]
     pub fn vrep(&self, id: VertID) -> EdgeID {
-        self.vert_rep
-            .get(id)
-            .copied()
-            .unwrap_or_else(|| panic!("{id} has no vrep"))
+        self.vert_rep.get(id).copied().unwrap_or_else(|| panic!("{id} has no vrep"))
     }
 
     // Returns the "representative" edge of the given face.
     // Panics if the face has no representative edge defined.
     #[must_use]
     pub fn frep(&self, id: FaceID) -> EdgeID {
-        self.face_rep
-            .get(id)
-            .copied()
-            .unwrap_or_else(|| panic!("{id} has no frep"))
+        self.face_rep.get(id).copied().unwrap_or_else(|| panic!("{id} has no frep"))
     }
 
     // Returns the root vertex of the given edge.
     // Panics if the edge has no root defined or if the root does not exist.
     #[must_use]
     pub fn root(&self, id: EdgeID) -> VertID {
-        self.edge_root
-            .get(id)
-            .copied()
-            .unwrap_or_else(|| panic!("{id} has no root"))
+        self.edge_root.get(id).copied().unwrap_or_else(|| panic!("{id} has no root"))
     }
 
     // Returns the root of the twin edge of the given edge. (also named toor, reverse of root)
@@ -376,22 +321,17 @@ impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
     // Panics if the edge has no twin defined or if the twin does not exist.
     #[must_use]
     pub fn twin(&self, id: EdgeID) -> EdgeID {
-        self.edge_twin
-            .get(id)
-            .copied()
-            .unwrap_or_else(|| panic!("{id} has no twin"))
+        self.edge_twin.get(id).copied().unwrap_or_else(|| panic!("{id} has no twin"))
     }
 
     // Returns the next edge of the given edge.
     // Panics if the edge has no next defined or if the next does not exist.
     #[must_use]
     pub fn next(&self, id: EdgeID) -> EdgeID {
-        self.edge_next
-            .get(id)
-            .copied()
-            .unwrap_or_else(|| panic!("{id} has no next"))
+        self.edge_next.get(id).copied().unwrap_or_else(|| panic!("{id} has no next"))
     }
 
+    #[must_use]
     pub fn nexts(&self, id: EdgeID) -> Vec<EdgeID> {
         let mut nexts = vec![];
         let mut cur = id;
@@ -408,10 +348,7 @@ impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
     // Panics if the edge has no face defined or if the face does not exist.
     #[must_use]
     pub fn face(&self, id: EdgeID) -> FaceID {
-        self.edge_face
-            .get(id)
-            .copied()
-            .unwrap_or_else(|| panic!("{id} has no face"))
+        self.edge_face.get(id).copied().unwrap_or_else(|| panic!("{id} has no face"))
     }
 
     // Returns the start and end vertex IDs of the given edge.
@@ -424,10 +361,7 @@ impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
     // Returns the corner vertices of a given face.
     #[must_use]
     pub fn corners(&self, id: FaceID) -> Vec<VertID> {
-        self.edges(id)
-            .into_iter()
-            .map(|edge_id| self.root(edge_id))
-            .collect()
+        self.edges(id).into_iter().map(|edge_id| self.root(edge_id)).collect()
     }
 
     // Returns the outgoing edges of a given vertex. (CLOCKWISE OR COUNTERCLOCKWISE?)
@@ -452,10 +386,7 @@ impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
     // Returns the faces around a given vertex.
     #[must_use]
     pub fn star(&self, id: VertID) -> Vec<FaceID> {
-        self.outgoing(id)
-            .iter()
-            .map(|&edge_id| self.face(edge_id))
-            .collect()
+        self.outgoing(id).iter().map(|&edge_id| self.face(edge_id)).collect()
     }
 
     // Returns the faces around a given vertex.
@@ -467,15 +398,20 @@ impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
     // Returns the face with given vertices.
     #[must_use]
     pub fn face_with_verts(&self, verts: &[VertID]) -> Option<FaceID> {
-        for face_id in self.star(verts[0]) {
-            if verts
-                .iter()
-                .all(|&vert_id| self.star(vert_id).contains(&face_id))
-            {
-                return Some(face_id);
-            }
-        }
-        None
+        self.star(verts[0])
+            .into_iter()
+            .find(|&face_id| verts.iter().all(|&vert_id| self.star(vert_id).contains(&face_id)))
+    }
+
+    // Returns the two edges of a given face that are connected to the given vertex.
+    #[must_use]
+    pub fn edges_in_face_with_vert(&self, face_id: FaceID, vert_id: VertID) -> Option<[EdgeID; 2]> {
+        let edges = self.edges(face_id);
+        edges
+            .into_iter()
+            .filter(|&edge_id| self.root(edge_id) == vert_id || self.toor(edge_id) == vert_id)
+            .collect_tuple()
+            .map_or(None, |(a, b)| Some([a, b]))
     }
 
     // Returns the edge between the two vertices. Returns None if the vertices are not connected.
@@ -509,19 +445,13 @@ impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
     // Returns the neighbors of a given vertex.
     #[must_use]
     pub fn vneighbors(&self, id: VertID) -> Vec<VertID> {
-        self.outgoing(id)
-            .iter()
-            .map(|&edge_id| self.root(self.twin(edge_id)))
-            .collect()
+        self.outgoing(id).iter().map(|&edge_id| self.root(self.twin(edge_id))).collect()
     }
 
     // Returns the (edge-wise) neighbors of a given face.
     #[must_use]
     pub fn fneighbors(&self, id: FaceID) -> Vec<FaceID> {
-        self.edges(id)
-            .into_iter()
-            .map(|edge_id| self.face(self.twin(edge_id)))
-            .collect()
+        self.edges(id).into_iter().map(|edge_id| self.face(self.twin(edge_id))).collect()
     }
 
     // Returns the number of vertices in the mesh.
@@ -560,25 +490,19 @@ impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
     // Return `n` random vertices.
     #[must_use]
     pub fn random_verts(&self, n: usize) -> Vec<VertID> {
-        self.verts
-            .keys()
-            .choose_multiple(&mut rand::thread_rng(), n)
+        self.verts.keys().choose_multiple(&mut rand::thread_rng(), n)
     }
 
     // Return `n` random edges.
     #[must_use]
     pub fn random_edges(&self, n: usize) -> Vec<EdgeID> {
-        self.edges
-            .keys()
-            .choose_multiple(&mut rand::thread_rng(), n)
+        self.edges.keys().choose_multiple(&mut rand::thread_rng(), n)
     }
 
     // Return `n` random faces.
     #[must_use]
     pub fn random_faces(&self, n: usize) -> Vec<FaceID> {
-        self.faces
-            .keys()
-            .choose_multiple(&mut rand::thread_rng(), n)
+        self.faces.keys().choose_multiple(&mut rand::thread_rng(), n)
     }
 
     pub fn neighbor_function_primal(&self) -> impl Fn(VertID) -> Vec<VertID> + '_ {
@@ -600,6 +524,7 @@ impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
         }
     }
 
+    #[must_use]
     pub fn is_connected(&self) -> bool {
         hutspot::graph::find_ccs(&self.vert_ids(), self.neighbor_function_primal()).len() == 1
     }
