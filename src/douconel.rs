@@ -35,7 +35,7 @@ impl Display for FaceID {
     }
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone, Serialize, Deserialize)]
 pub enum MeshError {
     #[error("Edge ({0}, {1}) does not have a twin (mesh is not a closed 2-manifold)")]
     NoTwin(VertID, VertID),
