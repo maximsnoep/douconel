@@ -45,7 +45,7 @@ impl HasPosition for EmbeddedVertex {
     }
 }
 
-impl<V: Default + HasPosition, E: Default, F: Default> Douconel<V, E, F> {
+impl<V: Default + Clone + HasPosition, E: Default + Clone, F: Default + Clone> Douconel<V, E, F> {
     // This is a struct that defines an embedded mesh with vertices (with position), edges, and faces (with clockwise ordering).
     // This embedded mesh is:
     //      a closed 2-manifold: Each edge corresponds to exactly two faces.
@@ -53,14 +53,10 @@ impl<V: Default + HasPosition, E: Default, F: Default> Douconel<V, E, F> {
     //      orientable: There exists a consistent normal for each face.
     //      polygonal: Each face is a simple polygon (lies in a plane, no intersections).
     // These requirements will be true per construction.
-    pub fn from_embedded_faces(
-        faces: &[Vec<usize>],
-        vertex_positions: &[Vector3D],
-    ) -> Result<(Self, VertMap, FaceMap), EmbeddedMeshError> {
+    pub fn from_embedded_faces(faces: &[Vec<usize>], vertex_positions: &[Vector3D]) -> Result<(Self, VertMap, FaceMap), EmbeddedMeshError> {
         let non_embedded = Self::from_faces(faces);
         if let Ok((mut douconel, vertex_map, face_map)) = non_embedded {
-            for (inp_vertex_id, inp_vertex_position) in vertex_positions.iter().copied().enumerate()
-            {
+            for (inp_vertex_id, inp_vertex_position) in vertex_positions.iter().copied().enumerate() {
                 let vertex_id = vertex_map
                     .get_by_left(&inp_vertex_id)
                     .copied()
@@ -86,12 +82,7 @@ impl<V: Default + HasPosition, E: Default, F: Default> Douconel<V, E, F> {
                 let b = corners[1];
                 let c = corners[2];
                 for d in corners.into_iter().skip(3) {
-                    if !hutspot::geom::are_points_coplanar(
-                        douconel.position(a),
-                        douconel.position(b),
-                        douconel.position(c),
-                        douconel.position(d),
-                    ) {
+                    if !hutspot::geom::are_points_coplanar(douconel.position(a), douconel.position(b), douconel.position(c), douconel.position(d)) {
                         return Err(EmbeddedMeshError::FaceNotSimple(face_id));
                     }
                 }
@@ -106,9 +97,7 @@ impl<V: Default + HasPosition, E: Default, F: Default> Douconel<V, E, F> {
                         let a_v = douconel.position(douconel.toor(edge_a));
                         let b_u = douconel.position(douconel.root(edge_b));
                         let b_v = douconel.position(douconel.toor(edge_b));
-                        if let Some((_, hutspot::geom::IntersectionType::Proper)) =
-                            hutspot::geom::calculate_3d_lineseg_intersection(a_u, a_v, b_u, b_v)
-                        {
+                        if let Some((_, hutspot::geom::IntersectionType::Proper)) = hutspot::geom::calculate_3d_lineseg_intersection(a_u, a_v, b_u, b_v) {
                             return Err(EmbeddedMeshError::FaceNotSimple(face_id));
                         }
                     }
@@ -121,15 +110,9 @@ impl<V: Default + HasPosition, E: Default, F: Default> Douconel<V, E, F> {
         }
     }
 
-    pub fn obj_to_elements(
-        reader: impl BufRead,
-    ) -> Result<(Vec<Vector3D>, Vec<Vec<usize>>), obj::ObjError> {
+    pub fn obj_to_elements(reader: impl BufRead) -> Result<(Vec<Vector3D>, Vec<Vec<usize>>), obj::ObjError> {
         let obj = obj::ObjData::load_buf(reader)?;
-        let verts = obj
-            .position
-            .iter()
-            .map(|v| Vector3D::new(v[0].into(), v[1].into(), v[2].into()))
-            .collect_vec();
+        let verts = obj.position.iter().map(|v| Vector3D::new(v[0].into(), v[1].into(), v[2].into())).collect_vec();
         let faces = obj.objects[0].groups[0]
             .polys
             .iter()
@@ -138,15 +121,9 @@ impl<V: Default + HasPosition, E: Default, F: Default> Douconel<V, E, F> {
         Ok((verts, faces))
     }
 
-    pub fn stl_to_elements(
-        mut reader: impl BufRead + std::io::Seek,
-    ) -> Result<(Vec<Vector3D>, Vec<Vec<usize>>), std::io::Error> {
+    pub fn stl_to_elements(mut reader: impl BufRead + std::io::Seek) -> Result<(Vec<Vector3D>, Vec<Vec<usize>>), std::io::Error> {
         let stl = stl_io::read_stl(&mut reader)?;
-        let verts = stl
-            .vertices
-            .iter()
-            .map(|v| Vector3D::new(v[0].into(), v[1].into(), v[2].into()))
-            .collect_vec();
+        let verts = stl.vertices.iter().map(|v| Vector3D::new(v[0].into(), v[1].into(), v[2].into())).collect_vec();
         let faces = stl.faces.iter().map(|f| f.vertices.to_vec()).collect_vec();
         Ok((verts, faces))
     }
@@ -166,9 +143,7 @@ impl<V: Default + HasPosition, E: Default, F: Default> Douconel<V, E, F> {
                         "Something went wrong while reading the STL file: {path:?}\nErr: {e}"
                     )))),
                 },
-                _ => Err(EmbeddedMeshError::MeshError(MeshError::Unknown(format!(
-                    "Unknown file extension: {path:?}",
-                )))),
+                _ => Err(EmbeddedMeshError::MeshError(MeshError::Unknown(format!("Unknown file extension: {path:?}",)))),
             },
             Err(e) => Err(EmbeddedMeshError::MeshError(MeshError::Unknown(format!(
                 "Cannot read file: {path:?}\nErr: {e}"
@@ -179,10 +154,7 @@ impl<V: Default + HasPosition, E: Default, F: Default> Douconel<V, E, F> {
     // Get position of a given vertex.
     #[must_use]
     pub fn position(&self, id: VertID) -> Vector3D {
-        self.verts
-            .get(id)
-            .unwrap_or_else(|| panic!("V:{id:?} not initialized"))
-            .position()
+        self.verts.get(id).unwrap_or_else(|| panic!("V:{id:?} not initialized")).position()
     }
 
     // Get centroid of a given polygonal face.
@@ -190,11 +162,7 @@ impl<V: Default + HasPosition, E: Default, F: Default> Douconel<V, E, F> {
     // Be careful with concave faces, the centroid might lay outside the face.
     #[must_use]
     pub fn centroid(&self, face_id: FaceID) -> Vector3D {
-        hutspot::math::calculate_average_f64(
-            self.edges(face_id)
-                .iter()
-                .map(|&edge_id| self.position(self.root(edge_id))),
-        )
+        hutspot::math::calculate_average_f64(self.edges(face_id).iter().map(|&edge_id| self.position(self.root(edge_id))))
     }
 
     // Get midpoint of a given edge.
@@ -261,13 +229,11 @@ impl<V: Default + HasPosition, E: Default, F: Default> Douconel<V, E, F> {
     // Vector area of a given face.
     #[must_use]
     pub fn vector_area(&self, id: FaceID) -> Vector3D {
-        self.edges(id)
-            .iter()
-            .fold(Vector3D::zeros(), |sum, &edge_id| {
-                let u = self.vector(self.twin(edge_id));
-                let v = self.vector(self.next(edge_id));
-                sum + u.cross(&v)
-            })
+        self.edges(id).iter().fold(Vector3D::zeros(), |sum, &edge_id| {
+            let u = self.vector(self.twin(edge_id));
+            let v = self.vector(self.next(edge_id));
+            sum + u.cross(&v)
+        })
     }
 
     // Get normal of face `id`. Assumes the face is planar. If the face is not planar, then this function will not return the correct normal.
@@ -280,11 +246,7 @@ impl<V: Default + HasPosition, E: Default, F: Default> Douconel<V, E, F> {
     // Get the average normals around vertex `id`.
     #[must_use]
     pub fn vert_normal(&self, id: VertID) -> Vector3D {
-        self.star(id)
-            .iter()
-            .map(|&face_id| self.normal(face_id))
-            .sum::<Vector3D>()
-            .normalize()
+        self.star(id).iter().map(|&face_id| self.normal(face_id)).sum::<Vector3D>().normalize()
     }
 
     // Get the normal of edge `id` by averaging the normals of the two faces it belongs to.
@@ -300,18 +262,12 @@ impl<V: Default + HasPosition, E: Default, F: Default> Douconel<V, E, F> {
     }
 
     // Weight function
-    pub fn weight_function_angle_edges(
-        &self,
-        slack: i32,
-    ) -> impl Fn(EdgeID, EdgeID) -> OrderedFloat<Float> + '_ {
+    pub fn weight_function_angle_edges(&self, slack: i32) -> impl Fn(EdgeID, EdgeID) -> OrderedFloat<Float> + '_ {
         move |a, b| OrderedFloat(self.angle(a, b).powi(slack))
     }
 
     // Weight function
-    pub fn weight_function_angle_edgepairs(
-        &self,
-        slack: i32,
-    ) -> impl Fn((EdgeID, EdgeID), (EdgeID, EdgeID)) -> OrderedFloat<Float> + '_ {
+    pub fn weight_function_angle_edgepairs(&self, slack: i32) -> impl Fn((EdgeID, EdgeID), (EdgeID, EdgeID)) -> OrderedFloat<Float> + '_ {
         move |a, b| {
             let vector_a = self.midpoint(a.1) - self.midpoint(a.0);
             let vector_b = self.midpoint(b.1) - self.midpoint(b.0);
@@ -331,10 +287,8 @@ impl<V: Default + HasPosition, E: Default, F: Default> Douconel<V, E, F> {
             let vector_b = self.midpoint(b[1]) - self.midpoint(b[0]);
 
             let weight = self.vec_angle(vector_a, vector_b).powi(angular_slack)
-                + (self.vec_angle(vector_a.cross(&self.edge_normal(a[0])), axis))
-                    .powi(alignment_slack)
-                + (self.vec_angle(vector_b.cross(&self.edge_normal(b[0])), axis))
-                    .powi(alignment_slack);
+                + (self.vec_angle(vector_a.cross(&self.edge_normal(a[0])), axis)).powi(alignment_slack)
+                + (self.vec_angle(vector_b.cross(&self.edge_normal(b[0])), axis)).powi(alignment_slack);
 
             OrderedFloat(weight)
         }

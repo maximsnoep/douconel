@@ -76,7 +76,7 @@ pub struct Douconel<V, E, F> {
     face_rep: SecondaryMap<FaceID, EdgeID>,
 }
 
-impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
+impl<V: Default + Clone, E: Default + Clone, F: Default + Clone> Douconel<V, E, F> {
     // Creates a new, empty Douconel.
     #[must_use]
     fn new() -> Self {
@@ -389,7 +389,7 @@ impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
         self.outgoing(id).iter().map(|&edge_id| self.face(edge_id)).collect()
     }
 
-    // Returns the faces around a given vertex.
+    // Returns the faces around a given edge.
     #[must_use]
     pub fn faces(&self, id: EdgeID) -> [FaceID; 2] {
         [self.face(id), self.face(self.twin(id))]
@@ -527,5 +527,194 @@ impl<V: Default, E: Default, F: Default> Douconel<V, E, F> {
     #[must_use]
     pub fn is_connected(&self) -> bool {
         hutspot::graph::find_ccs(&self.vert_ids(), self.neighbor_function_primal()).len() == 1
+    }
+
+    pub fn split_edge(&mut self, edge_id: EdgeID) -> (VertID, [FaceID; 4]) {
+        // First face
+        let e_ab = edge_id;
+        let e_b0 = self.next(e_ab);
+        let e_0a = self.next(e_b0);
+        assert!(self.next(e_0a) == e_ab);
+
+        let v_a = self.root(e_ab);
+        let v_b = self.root(e_b0);
+        let v_0 = self.root(e_0a);
+
+        // Second face
+        let e_ba = self.twin(edge_id);
+        let e_a1 = self.next(e_ba);
+        let e_1b = self.next(e_a1);
+        assert!(self.next(e_1b) == e_ba);
+
+        assert!(self.root(e_ba) == v_b);
+        assert!(self.root(e_a1) == v_a);
+        let v_1 = self.root(e_1b);
+
+        // Four new faces (re-use original id for first 2)
+        let f_0 = self.face(e_ab);
+        self.face_rep.insert(f_0, e_0a);
+
+        let f_1 = self.face(e_ba);
+        self.face_rep.insert(f_1, e_a1);
+
+        let f_2 = self.faces.insert(F::default());
+        self.face_rep.insert(f_2, e_b0);
+
+        let f_3 = self.faces.insert(F::default());
+        self.face_rep.insert(f_3, e_1b);
+
+        // Six new edges (with next six available ids)
+
+        // f_0
+        let e_ax = e_ab;
+        let e_x0 = self.edges.insert(E::default());
+
+        // f_1
+        let e_xa = e_ba;
+        let e_1x = self.edges.insert(E::default());
+
+        // f_2
+        let e_xb = self.edges.insert(E::default());
+        let e_0x = self.edges.insert(E::default());
+
+        // f_3
+        let e_bx = self.edges.insert(E::default());
+        let e_x1 = self.edges.insert(E::default());
+
+        // One new vertex (with next available id)
+        let v_x = self.verts.insert(V::default());
+        self.vert_rep.insert(v_x, e_xa);
+
+        self.vert_rep.insert(v_b, e_b0);
+        self.vert_rep.insert(v_a, e_a1);
+
+        // Set the edges correctly
+        self.edge_root.insert(e_ax, v_a);
+        self.edge_face.insert(e_ax, f_0);
+        self.edge_next.insert(e_ax, e_x0);
+        self.edge_twin.insert(e_ax, e_xa);
+
+        self.edge_root.insert(e_xa, v_x);
+        self.edge_face.insert(e_xa, f_1);
+        self.edge_next.insert(e_xa, e_a1);
+        self.edge_twin.insert(e_xa, e_ax);
+
+        self.edge_root.insert(e_bx, v_b);
+        self.edge_face.insert(e_bx, f_3);
+        self.edge_next.insert(e_bx, e_x1);
+        self.edge_twin.insert(e_bx, e_xb);
+
+        self.edge_root.insert(e_xb, v_x);
+        self.edge_face.insert(e_xb, f_2);
+        self.edge_next.insert(e_xb, e_b0);
+        self.edge_twin.insert(e_xb, e_bx);
+
+        self.edge_root.insert(e_0x, v_0);
+        self.edge_face.insert(e_0x, f_2);
+        self.edge_next.insert(e_0x, e_xb);
+        self.edge_twin.insert(e_0x, e_x0);
+
+        self.edge_root.insert(e_x0, v_x);
+        self.edge_face.insert(e_x0, f_0);
+        self.edge_next.insert(e_x0, e_0a);
+        self.edge_twin.insert(e_x0, e_0x);
+
+        self.edge_root.insert(e_1x, v_1);
+        self.edge_face.insert(e_1x, f_1);
+        self.edge_next.insert(e_1x, e_xa);
+        self.edge_twin.insert(e_1x, e_x1);
+
+        self.edge_root.insert(e_x1, v_x);
+        self.edge_face.insert(e_x1, f_3);
+        self.edge_next.insert(e_x1, e_1b);
+        self.edge_twin.insert(e_x1, e_1x);
+
+        self.edge_face.insert(e_a1, f_1);
+        self.edge_next.insert(e_a1, e_1x);
+
+        self.edge_face.insert(e_1b, f_3);
+        self.edge_next.insert(e_1b, e_bx);
+
+        self.edge_face.insert(e_b0, f_2);
+        self.edge_next.insert(e_b0, e_0x);
+
+        self.edge_face.insert(e_0a, f_0);
+        self.edge_next.insert(e_0a, e_ax);
+
+        return (v_x, [f_0, f_1, f_2, f_3]);
+    }
+
+    pub fn split_face(&mut self, face_id: FaceID) -> (VertID, [FaceID; 3]) {
+        let edges = self.edges(face_id);
+        // let centroid = self.centroid(face_id);
+
+        // Original face
+        let e_01 = edges[0];
+        let v_0 = self.root(e_01);
+
+        let e_12 = edges[1];
+        let v_1 = self.root(e_12);
+
+        let e_20 = edges[2];
+        let v_2 = self.root(e_20);
+
+        // Two new faces (original face stays the same)
+        let f_0 = face_id;
+
+        let f_1 = self.faces.insert(self.faces[face_id].clone());
+        let f_2 = self.faces.insert(self.faces[face_id].clone());
+
+        self.face_rep.insert(f_1, e_12);
+        self.face_rep.insert(f_2, e_20);
+
+        // Six new edges (with next six available ids)
+        let e_x0 = self.edges.insert(E::default());
+        let e_x1 = self.edges.insert(E::default());
+        let e_x2 = self.edges.insert(E::default());
+        let e_0x = self.edges.insert(E::default());
+        let e_1x = self.edges.insert(E::default());
+        let e_2x = self.edges.insert(E::default());
+
+        let v_x = self.verts.insert(V::default());
+        self.vert_rep.insert(v_x, e_x0);
+
+        self.edge_root.insert(e_x0, v_x);
+        self.edge_face.insert(e_x0, f_0);
+        self.edge_next.insert(e_x0, e_01);
+        self.edge_twin.insert(e_x0, e_0x);
+
+        self.edge_root.insert(e_x1, v_x);
+        self.edge_face.insert(e_x1, f_1);
+        self.edge_next.insert(e_x1, e_12);
+        self.edge_twin.insert(e_x1, e_1x);
+
+        self.edge_root.insert(e_x2, v_x);
+        self.edge_face.insert(e_x2, f_2);
+        self.edge_next.insert(e_x2, e_20);
+        self.edge_twin.insert(e_x2, e_2x);
+
+        self.edge_root.insert(e_0x, v_0);
+        self.edge_face.insert(e_0x, f_2);
+        self.edge_next.insert(e_0x, e_x2);
+        self.edge_twin.insert(e_0x, e_x0);
+
+        self.edge_root.insert(e_1x, v_1);
+        self.edge_face.insert(e_1x, f_0);
+        self.edge_next.insert(e_1x, e_x0);
+        self.edge_twin.insert(e_1x, e_x1);
+
+        self.edge_root.insert(e_2x, v_2);
+        self.edge_face.insert(e_2x, f_1);
+        self.edge_next.insert(e_2x, e_x1);
+        self.edge_twin.insert(e_2x, e_x2);
+
+        self.edge_face.insert(e_01, f_0);
+        self.edge_face.insert(e_12, f_1);
+        self.edge_face.insert(e_20, f_2);
+        self.edge_next.insert(e_01, e_1x);
+        self.edge_next.insert(e_12, e_2x);
+        self.edge_next.insert(e_20, e_0x);
+
+        return (v_x, [f_0, f_1, f_2]);
     }
 }
