@@ -364,7 +364,7 @@ impl<V: Default + Clone, E: Default + Clone, F: Default + Clone> Douconel<V, E, 
         self.edges(id).into_iter().map(|edge_id| self.root(edge_id)).collect()
     }
 
-    // Returns the outgoing edges of a given vertex. (CLOCKWISE OR COUNTERCLOCKWISE?)
+    // Returns the outgoing edges of a given vertex. (clockwise order)
     #[must_use]
     pub fn outgoing(&self, id: VertID) -> Vec<EdgeID> {
         let mut edges = vec![self.vrep(id)];
@@ -377,13 +377,13 @@ impl<V: Default + Clone, E: Default + Clone, F: Default + Clone> Douconel<V, E, 
         }
     }
 
-    // Returns the edges of a given face.
+    // Returns the edges of a given face. (anticlockwise order)
     #[must_use]
     pub fn edges(&self, id: FaceID) -> Vec<EdgeID> {
         [vec![self.frep(id)], self.nexts(self.frep(id))].concat()
     }
 
-    // Returns the faces around a given vertex.
+    // Returns the faces around a given vertex. (clockwise order)
     #[must_use]
     pub fn star(&self, id: VertID) -> Vec<FaceID> {
         self.outgoing(id).iter().map(|&edge_id| self.face(edge_id)).collect()
