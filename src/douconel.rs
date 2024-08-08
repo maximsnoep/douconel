@@ -326,11 +326,13 @@ impl<V: Default + Clone, E: Default + Clone, F: Default + Clone> Douconel<V, E, 
 
     // Returns the next edge of the given edge.
     // Panics if the edge has no next defined or if the next does not exist.
+    #[inline]
     #[must_use]
     pub fn next(&self, id: EdgeID) -> EdgeID {
         self.edge_next.get(id).copied().unwrap_or_else(|| panic!("{id} has no next"))
     }
 
+    #[inline]
     #[must_use]
     pub fn nexts(&self, id: EdgeID) -> Vec<EdgeID> {
         let mut nexts = vec![];
@@ -346,6 +348,7 @@ impl<V: Default + Clone, E: Default + Clone, F: Default + Clone> Douconel<V, E, 
 
     // Returns the face of the given edge.
     // Panics if the edge has no face defined or if the face does not exist.
+    #[inline]
     #[must_use]
     pub fn face(&self, id: EdgeID) -> FaceID {
         self.edge_face.get(id).copied().unwrap_or_else(|| panic!("{id} has no face"))
@@ -353,18 +356,21 @@ impl<V: Default + Clone, E: Default + Clone, F: Default + Clone> Douconel<V, E, 
 
     // Returns the start and end vertex IDs of the given edge.
     // Panics if any of the roots are not defined or do not exist.
+    #[inline]
     #[must_use]
     pub fn endpoints(&self, id: EdgeID) -> (VertID, VertID) {
         (self.root(id), self.root(self.twin(id)))
     }
 
     // Returns the corner vertices of a given face.
+    #[inline]
     #[must_use]
     pub fn corners(&self, id: FaceID) -> Vec<VertID> {
         self.edges(id).into_iter().map(|edge_id| self.root(edge_id)).collect()
     }
 
     // Returns the outgoing edges of a given vertex. (clockwise order)
+    #[inline]
     #[must_use]
     pub fn outgoing(&self, id: VertID) -> Vec<EdgeID> {
         let mut edges = vec![self.vrep(id)];
@@ -378,24 +384,28 @@ impl<V: Default + Clone, E: Default + Clone, F: Default + Clone> Douconel<V, E, 
     }
 
     // Returns the edges of a given face. (anticlockwise order)
+    #[inline]
     #[must_use]
     pub fn edges(&self, id: FaceID) -> Vec<EdgeID> {
         [vec![self.frep(id)], self.nexts(self.frep(id))].concat()
     }
 
     // Returns the faces around a given vertex. (clockwise order)
+    #[inline]
     #[must_use]
     pub fn star(&self, id: VertID) -> Vec<FaceID> {
         self.outgoing(id).iter().map(|&edge_id| self.face(edge_id)).collect()
     }
 
     // Returns the faces around a given edge.
+    #[inline]
     #[must_use]
     pub fn faces(&self, id: EdgeID) -> [FaceID; 2] {
         [self.face(id), self.face(self.twin(id))]
     }
 
     // Returns the face with given vertices.
+    #[inline]
     #[must_use]
     pub fn face_with_verts(&self, verts: &[VertID]) -> Option<FaceID> {
         self.star(verts[0])
@@ -404,6 +414,7 @@ impl<V: Default + Clone, E: Default + Clone, F: Default + Clone> Douconel<V, E, 
     }
 
     // Returns the two edges of a given face that are connected to the given vertex.
+    #[inline]
     #[must_use]
     pub fn edges_in_face_with_vert(&self, face_id: FaceID, vert_id: VertID) -> Option<[EdgeID; 2]> {
         let edges = self.edges(face_id);
@@ -415,6 +426,7 @@ impl<V: Default + Clone, E: Default + Clone, F: Default + Clone> Douconel<V, E, 
     }
 
     // Returns the edge between the two vertices. Returns None if the vertices are not connected.
+    #[inline]
     #[must_use]
     pub fn edge_between_verts(&self, id_a: VertID, id_b: VertID) -> Option<(EdgeID, EdgeID)> {
         for &edge_a_id in &self.outgoing(id_a) {
@@ -513,14 +525,11 @@ impl<V: Default + Clone, E: Default + Clone, F: Default + Clone> Douconel<V, E, 
         |e_id| self.outgoing(self.endpoints(e_id).1)
     }
 
+    #[inline]
     pub fn neighbor_function_edgepairgraph(&self) -> impl Fn([EdgeID; 2]) -> Vec<[EdgeID; 2]> + '_ {
         |[_, to]| {
             let next = self.twin(to);
-            self.edges(self.face(next))
-                .into_iter()
-                .filter(|&edge_id| edge_id != next)
-                .map(|next_to| [next, next_to])
-                .collect()
+            self.nexts(next).into_iter().map(|next_to| [next, next_to]).collect()
         }
     }
 
