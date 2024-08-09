@@ -293,4 +293,21 @@ impl<V: Default + Clone + HasPosition, E: Default + Clone, F: Default + Clone> D
             OrderedFloat(weight)
         }
     }
+
+    // Weight function
+    pub fn weight_function_angle_edgepairs_aligned_components(
+        &self,
+        axis: Vector3D,
+    ) -> impl Fn([EdgeID; 2], [EdgeID; 2]) -> (OrderedFloat<Float>, OrderedFloat<Float>, OrderedFloat<Float>) + '_ {
+        move |a, b| {
+            let vector_a = self.midpoint(a[1]) - self.midpoint(a[0]);
+            let vector_b = self.midpoint(b[1]) - self.midpoint(b[0]);
+
+            (
+                OrderedFloat(self.vec_angle(vector_a, vector_b)),
+                OrderedFloat(self.vec_angle(vector_a.cross(&self.edge_normal(a[0])), axis)),
+                OrderedFloat(self.vec_angle(vector_b.cross(&self.edge_normal(b[0])), axis)),
+            )
+        }
+    }
 }
