@@ -14,10 +14,16 @@ mod tests {
         douconel_embedded::EmbeddedVertex,
     };
 
+    slotmap::new_key_type! {
+        struct VertID;
+        struct EdgeID;
+        struct FaceID;
+    }
+
     #[test]
     fn from_manual() {
         let faces = vec![vec![0, 2, 1], vec![0, 1, 3], vec![1, 2, 3], vec![0, 3, 2]];
-        let douconel = Douconel::<Empty, Empty, Empty>::from_faces(&faces);
+        let douconel = Douconel::<VertID, Empty, EdgeID, Empty, FaceID, Empty>::from_faces(&faces);
         assert!(douconel.is_ok(), "{douconel:?}");
         if let Ok((douconel, _, _)) = douconel {
             assert!(douconel.nr_verts() == 4);
@@ -32,8 +38,7 @@ mod tests {
 
     #[test]
     fn from_blub_stl() {
-        let douconel =
-            Douconel::<EmbeddedVertex, (), ()>::from_file(&PathBuf::from("assets/blub001k.stl"));
+        let douconel = Douconel::<VertID, EmbeddedVertex, EdgeID, Empty, FaceID, Empty>::from_file(&PathBuf::from("assets/blub001k.stl"));
         assert!(douconel.is_ok(), "{douconel:?}");
         if let Ok((douconel, _, _)) = douconel {
             assert!(douconel.nr_verts() == 945);
@@ -48,9 +53,7 @@ mod tests {
 
     #[test]
     fn from_blub_obj() {
-        let douconel = Douconel::<EmbeddedVertex, Empty, Empty>::from_file(&PathBuf::from(
-            "assets/blub001k.obj",
-        ));
+        let douconel = Douconel::<VertID, EmbeddedVertex, EdgeID, Empty, FaceID, Empty>::from_file(&PathBuf::from("assets/blub001k.obj"));
         assert!(douconel.is_ok(), "{douconel:?}");
         if let Ok((douconel, _, _)) = douconel {
             assert!(douconel.nr_verts() == 945);
@@ -65,9 +68,7 @@ mod tests {
 
     #[test]
     fn from_nefertiti_stl() {
-        let douconel = Douconel::<EmbeddedVertex, (), ()>::from_file(&PathBuf::from(
-            "assets/nefertiti099k.stl",
-        ));
+        let douconel = Douconel::<VertID, EmbeddedVertex, EdgeID, Empty, FaceID, Empty>::from_file(&PathBuf::from("assets/nefertiti099k.stl"));
         assert!(douconel.is_ok(), "{douconel:?}");
         if let Ok((douconel, _, _)) = douconel {
             assert!(douconel.nr_verts() == 49971);
@@ -82,9 +83,7 @@ mod tests {
 
     #[test]
     fn from_hexahedron_obj() {
-        let douconel = Douconel::<EmbeddedVertex, Empty, Empty>::from_file(&PathBuf::from(
-            "assets/hexahedron.obj",
-        ));
+        let douconel = Douconel::<VertID, EmbeddedVertex, EdgeID, Empty, FaceID, Empty>::from_file(&PathBuf::from("assets/hexahedron.obj"));
         assert!(douconel.is_ok(), "{douconel:?}");
         if let Ok((douconel, _, _)) = douconel {
             assert!(douconel.nr_verts() == 8);
@@ -99,9 +98,7 @@ mod tests {
 
     #[test]
     fn from_tetrahedron_obj() {
-        let douconel = Douconel::<EmbeddedVertex, Empty, Empty>::from_file(&PathBuf::from(
-            "assets/tetrahedron.obj",
-        ));
+        let douconel = Douconel::<VertID, EmbeddedVertex, EdgeID, Empty, FaceID, Empty>::from_file(&PathBuf::from("assets/tetrahedron.obj"));
         assert!(douconel.is_ok(), "{douconel:?}");
         if let Ok((douconel, _, _)) = douconel {
             assert!(douconel.nr_verts() == 4);
@@ -116,9 +113,7 @@ mod tests {
 
     #[test]
     fn serialize() {
-        let douconel = Douconel::<EmbeddedVertex, Empty, Empty>::from_file(&PathBuf::from(
-            "assets/nefertiti099k.stl",
-        ));
+        let douconel = Douconel::<VertID, EmbeddedVertex, EdgeID, Empty, FaceID, Empty>::from_file(&PathBuf::from("assets/nefertiti099k.stl"));
 
         assert!(douconel.is_ok(), "{douconel:?}");
         if let Ok((douconel, _, _)) = douconel {
@@ -130,8 +125,7 @@ mod tests {
             println!("{serialized:?}");
 
             if let Ok(serialized) = serialized {
-                let deserialized =
-                    serde_json::from_str::<Douconel<EmbeddedVertex, u8, u8>>(&serialized);
+                let deserialized = serde_json::from_str::<Douconel<VertID, EmbeddedVertex, EdgeID, Empty, FaceID, Empty>>(&serialized);
 
                 assert!(deserialized.is_ok(), "{deserialized:?}");
                 if let Ok(deserialized) = deserialized {

@@ -1,11 +1,15 @@
+use crate::{douconel::Douconel, douconel_embedded::HasPosition};
+use slotmap::Key;
+use std::collections::HashMap;
+
 type BevyMesh = bevy::prelude::Mesh;
 type BevyVec = bevy::math::Vec3;
 
 /// Construct a Bevy mesh object (one that can be rendered using Bevy).
 /// Requires a `color_map` to assign colors to faces. If no color is assigned to a face, it will be black.
-impl<V: Default + Clone + crate::douconel_embedded::HasPosition, E: Default + Clone, F: Default + Clone> crate::douconel::Douconel<V, E, F> {
+impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key, F: Default> Douconel<VertID, V, EdgeID, E, FaceID, F> {
     #[must_use]
-    pub fn bevy(&self, color_map: &std::collections::HashMap<crate::douconel::FaceID, [f32; 3]>) -> BevyMesh {
+    pub fn bevy(&self, color_map: &HashMap<FaceID, [f32; 3]>) -> BevyMesh {
         let mut vertex_positions = vec![];
         let mut vertex_normals = vec![];
         let mut vertex_colors = vec![];

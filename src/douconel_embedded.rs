@@ -1,7 +1,9 @@
-use crate::douconel::{Douconel, EdgeID, FaceID, FaceMap, MeshError, VertID, VertMap};
+use crate::douconel::{Douconel, MeshError};
+use bimap::BiHashMap;
 use itertools::Itertools;
 use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize};
+use slotmap::Key;
 use std::{
     fs::OpenOptions,
     io::{BufRead, BufReader},
@@ -10,7 +12,7 @@ use std::{
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub enum EmbeddedMeshError {
+pub enum EmbeddedMeshError<VertID, FaceID> {
     #[error("{0} is not a polygon (less than 3 vertices)")]
     FaceNotPolygon(FaceID),
     #[error("{0} is not planar (vertices are not coplanar)")]
@@ -18,7 +20,7 @@ pub enum EmbeddedMeshError {
     #[error("{0} is not simple (edges intersect)")]
     FaceNotSimple(FaceID),
     #[error("{0:?}")]
-    MeshError(MeshError),
+    MeshError(MeshError<VertID>),
 }
 
 type Float = f64;
@@ -45,7 +47,7 @@ impl HasPosition for EmbeddedVertex {
     }
 }
 
-impl<V: Default + Clone + HasPosition, E: Default + Clone, F: Default + Clone> Douconel<V, E, F> {
+impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key, F: Default> Douconel<VertID, V, EdgeID, E, FaceID, F> {
     // This is a struct that defines an embedded mesh with vertices (with position), edges, and faces (with clockwise ordering).
     // This embedded mesh is:
     //      a closed 2-manifold: Each edge corresponds to exactly two faces.
@@ -53,7 +55,10 @@ impl<V: Default + Clone + HasPosition, E: Default + Clone, F: Default + Clone> D
     //      orientable: There exists a consistent normal for each face.
     //      polygonal: Each face is a simple polygon (lies in a plane, no intersections).
     // These requirements will be true per construction.
-    pub fn from_embedded_faces(faces: &[Vec<usize>], vertex_positions: &[Vector3D]) -> Result<(Self, VertMap, FaceMap), EmbeddedMeshError> {
+    pub fn from_embedded_faces(
+        faces: &[Vec<usize>],
+        vertex_positions: &[Vector3D],
+    ) -> Result<(Self, BiHashMap<usize, VertID>, BiHashMap<usize, FaceID>), EmbeddedMeshError<VertID, FaceID>> {
         let non_embedded = Self::from_faces(faces);
         if let Ok((mut douconel, vertex_map, face_map)) = non_embedded {
             for (inp_vertex_id, inp_vertex_position) in vertex_positions.iter().copied().enumerate() {
@@ -128,7 +133,7 @@ impl<V: Default + Clone + HasPosition, E: Default + Clone, F: Default + Clone> D
         Ok((verts, faces))
     }
 
-    pub fn from_file(path: &PathBuf) -> Result<(Self, VertMap, FaceMap), EmbeddedMeshError> {
+    pub fn from_file(path: &PathBuf) -> Result<(Self, BiHashMap<usize, VertID>, BiHashMap<usize, FaceID>), EmbeddedMeshError<VertID, FaceID>> {
         match OpenOptions::new().read(true).open(path) {
             Ok(file) => match path.extension().unwrap().to_str() {
                 Some("obj") => match Self::obj_to_elements(BufReader::new(file)) {
