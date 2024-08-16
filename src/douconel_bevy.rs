@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 type BevyMesh = bevy::prelude::Mesh;
 type BevyVec = bevy::math::Vec3;
+type BevyColor = bevy::render::color::Color;
 
 /// Construct a Bevy mesh object (one that can be rendered using Bevy).
 /// Requires a `color_map` to assign colors to faces. If no color is assigned to a face, it will be black.
@@ -18,7 +19,7 @@ impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key
         for face_id in self.faces.keys() {
             let mut corners = self.corners(face_id);
 
-            'outer: while corners.len() > 2 {
+            'outer: while corners.len() >= 3 {
                 for i in 0..corners.len() {
                     let j = (i + 1) % corners.len();
                     let k = (i + 2) % corners.len();
@@ -28,7 +29,8 @@ impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key
                     let c = self.position(corners[k]);
                     let n = self.normal(face_id);
 
-                    if hutspot::geom::calculate_orientation(a, b, c, n) == hutspot::geom::Orientation::CCW
+                    if (hutspot::geom::calculate_orientation(a, b, c, n) == hutspot::geom::Orientation::CCW
+                        || hutspot::geom::calculate_orientation(a, b, c, n) == hutspot::geom::Orientation::C)
                         && corners
                             .clone()
                             .into_iter()
@@ -46,8 +48,8 @@ impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key
                             vertex_positions.push(BevyVec::new(position.x as f32, position.y as f32, position.z as f32));
                             let normal = self.vert_normal(vertex_id);
                             vertex_normals.push(BevyVec::new(normal.x as f32, normal.y as f32, normal.z as f32));
-                            let color = color_map.get(&face_id).unwrap_or(&[0., 0., 0.]);
-                            vertex_colors.push([color[0], color[1], color[2], 1.]);
+                            let color = color_map.get(&face_id).unwrap_or(&hutspot::color::BLACK);
+                            vertex_colors.push(BevyColor::rgb(color[0], color[1], color[2]).as_linear_rgba_f32());
                             vertex_uvs.push([0., 0.]);
                         }
 
