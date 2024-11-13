@@ -1,10 +1,11 @@
 use crate::{douconel::Douconel, douconel_embedded::HasPosition};
+use bevy::color::ColorToComponents;
 use slotmap::Key;
 use std::collections::HashMap;
 
 type BevyMesh = bevy::prelude::Mesh;
 type BevyVec = bevy::math::Vec3;
-type BevyColor = bevy::render::color::Color;
+type BevyColor = bevy::color::Color;
 
 /// Construct a Bevy mesh object (one that can be rendered using Bevy).
 /// Requires a `color_map` to assign colors to faces. If no color is assigned to a face, it will be black.
@@ -49,7 +50,8 @@ impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key
                             let normal = self.vert_normal(vertex_id);
                             vertex_normals.push(BevyVec::new(normal.x as f32, normal.y as f32, normal.z as f32));
                             let color = color_map.get(&face_id).unwrap_or(&hutspot::color::BLACK);
-                            vertex_colors.push(BevyColor::rgb(color[0], color[1], color[2]).as_linear_rgba_f32());
+                            let color_lrgb = BevyColor::srgb(color[0], color[1], color[2]).to_linear();
+                            vertex_colors.push([color_lrgb.red, color_lrgb.green, color_lrgb.blue, 1.]);
                             vertex_uvs.push([0., 0.]);
                         }
 
@@ -60,13 +62,14 @@ impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key
             }
         }
 
-        BevyMesh::new(bevy::render::render_resource::PrimitiveTopology::TriangleList)
-            .with_indices(Some(bevy::render::mesh::Indices::U32(
-                (0..u32::try_from(vertex_positions.len()).unwrap()).collect(),
-            )))
-            .with_inserted_attribute(BevyMesh::ATTRIBUTE_POSITION, vertex_positions)
-            .with_inserted_attribute(BevyMesh::ATTRIBUTE_NORMAL, vertex_normals)
-            .with_inserted_attribute(BevyMesh::ATTRIBUTE_COLOR, vertex_colors)
-            .with_inserted_attribute(BevyMesh::ATTRIBUTE_UV_0, vertex_uvs)
+        BevyMesh::new(
+            bevy::render::render_resource::PrimitiveTopology::TriangleList,
+            bevy::render::render_asset::RenderAssetUsages::RENDER_WORLD | bevy::render::render_asset::RenderAssetUsages::MAIN_WORLD,
+        )
+        .with_inserted_indices(bevy::render::mesh::Indices::U32((0..u32::try_from(vertex_positions.len()).unwrap()).collect()))
+        .with_inserted_attribute(BevyMesh::ATTRIBUTE_POSITION, vertex_positions)
+        .with_inserted_attribute(BevyMesh::ATTRIBUTE_NORMAL, vertex_normals)
+        .with_inserted_attribute(BevyMesh::ATTRIBUTE_COLOR, vertex_colors)
+        .with_inserted_attribute(BevyMesh::ATTRIBUTE_UV_0, vertex_uvs)
     }
 }

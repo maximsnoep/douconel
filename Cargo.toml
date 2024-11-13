@@ -21,4 +21,4 @@ bimap = "0.6.3" # for face and vertex maps
 stl_io = "0.7.0"
 obj = "0.10.2"
 petgraph = "0.6.4" # may not be needed? write own functions + use pathfinding
-bevy = "0.12.1"
+bevy = "0.14.2"

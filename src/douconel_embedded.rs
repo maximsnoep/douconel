@@ -241,6 +241,12 @@ impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key
         })
     }
 
+    // Area of a given face.
+    #[must_use]
+    pub fn area(&self, id: FaceID) -> Float {
+        self.vector_area(id).magnitude() / 2.0
+    }
+
     // Get normal of face `id`. Assumes the face is planar. If the face is not planar, then this function will not return the correct normal.
     // The normal is calculated as the normalized vector area of the face; https://en.wikipedia.org/wiki/Normal_(geometry)
     #[must_use]
