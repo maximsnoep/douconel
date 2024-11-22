@@ -1,5 +1,6 @@
 use crate::douconel::{Douconel, MeshError};
 use bimap::BiHashMap;
+use hutspot::geom::Vector2D;
 use itertools::Itertools;
 use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize};
@@ -320,5 +321,90 @@ impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key
                 OrderedFloat(self.vec_angle(vector_b.cross(&self.edge_normal(b[0])), axis)),
             )
         }
+    }
+}
+
+impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key, F: Default + Clone> Douconel<VertID, V, EdgeID, E, FaceID, F> {
+    pub fn splip_edge(&mut self, a: VertID, b: VertID) -> VertID {
+        // Make sure the edge exists
+        let edge = self.edge_between_verts(a, b).unwrap().0;
+
+        // Get the two faces adjacent to the two edges
+        let [f1, f2] = self.faces(edge);
+
+        // Get the anchor vertex of f1 (the vertex that is not a or b)
+        let c1 = self.corners(f1).iter().find(|&&v| v != a && v != b).unwrap().to_owned();
+        // Get the anchor vertex of f2 (the vertex that is not a or b)
+        let c2 = self.corners(f2).iter().find(|&&v| v != a && v != b).unwrap().to_owned();
+
+        // Get all required edges
+        let a_c1 = self.edge_between_verts(a, c1).unwrap().0;
+        let b_c1 = self.edge_between_verts(b, c1).unwrap().0;
+        let a_c2 = self.edge_between_verts(a, c2).unwrap().0;
+        let b_c2 = self.edge_between_verts(b, c2).unwrap().0;
+        let a_b = edge;
+
+        // Construct planar embedding respecting all edge lengths
+        let a_c1_distance = self.length(a_c1);
+        let b_c1_distance = self.length(b_c1);
+        let a_c2_distance = self.length(a_c2);
+        let b_c2_distance = self.length(b_c2);
+        let a_b_distance = self.length(a_b);
+
+        let a_position = Vector2D::new(0., 0.);
+        let b_position = Vector2D::new(a_b_distance, 0.);
+
+        // Calculate the position of c1 (under a_b)
+        // Draw circle with radius a_c1_distance and center a_position
+        // Draw circle with radius b_c1_distance and center b_position
+        // Find intersection point with negative y: this is the position of c1
+        let r = a_c1_distance;
+        let R = b_c1_distance;
+        let d = a_b_distance;
+
+        let x = d * d - r * r + R * R;
+        let y = -(R * R - x * x).sqrt();
+        let c1_position = Vector2D::new(x, y);
+
+        // Calculate the position of c2
+        // Draw circle with radius a_c2_distance and center a_position
+        // Draw circle with radius b_c2_distance and center b_position
+        // Find intersection point with positive y: this is the position of c2
+        let r = a_c2_distance;
+        let R = b_c2_distance;
+        let d = a_b_distance;
+
+        let x = d * d - r * r + R * R;
+        let y = (R * R - x * x).sqrt();
+        let c2_position = Vector2D::new(x, y);
+
+        // Find intersection of a_b and c1_c2
+        // Calculate the intersection of the lines a_b and c1_c2
+        let intersection = hutspot::geom::calculate_2d_lineseg_intersection(a_position, b_position, c1_position, c2_position)
+            .unwrap()
+            .0;
+
+        // The y coordinate of the intersection is 0
+        assert!(intersection[1].abs() < 1e-6);
+        // The length of the intersection from a_position is the t value (x coordinate)
+        let t = intersection[0];
+
+        // Calculate the position of the split vertex in 3D
+        let split_position = self.position(a) + (self.position(b) - self.position(a)) * t;
+
+        // Split edge a_b
+        let (split_vertex, new_faces) = self.split_edge(a_b);
+
+        // There exists an edge between c1 and split_vertex and c2 and split_vertex
+        assert!(self.edge_between_verts(c1, split_vertex).is_some());
+        assert!(self.edge_between_verts(c2, split_vertex).is_some());
+
+        // Move the split vertex to the correct position
+
+        let split_position = self.position(a) + (self.position(b) - self.position(a)) * 0.5;
+
+        self.verts.get_mut(split_vertex).unwrap().set_position(split_position);
+
+        return split_vertex;
     }
 }
