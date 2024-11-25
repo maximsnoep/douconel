@@ -325,7 +325,7 @@ impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key
 }
 
 impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key, F: Default + Clone> Douconel<VertID, V, EdgeID, E, FaceID, F> {
-    pub fn splip_edge(&mut self, a: VertID, b: VertID) -> VertID {
+    pub fn splip_edge(&mut self, a: VertID, b: VertID) -> Option<VertID> {
         // Make sure the edge exists
         let edge = self.edge_between_verts(a, b).unwrap().0;
 
@@ -387,7 +387,12 @@ impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key
         // The y coordinate of the intersection is 0
         assert!(intersection[1].abs() < 1e-6);
         // The length of the intersection from a_position is the t value (x coordinate)
-        let t = intersection[0];
+        let t = intersection[0] / a_b_distance;
+
+        if t < 1e-6 || t > 1. - 1e-6 {
+            // The intersection is at one of the endpoints of the edge
+            return None;
+        }
 
         // Calculate the position of the split vertex in 3D
         let split_position = self.position(a) + (self.position(b) - self.position(a)) * t;
@@ -405,6 +410,6 @@ impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key
 
         self.verts.get_mut(split_vertex).unwrap().set_position(split_position);
 
-        return split_vertex;
+        return Some(split_vertex);
     }
 }

@@ -509,6 +509,42 @@ impl<VertID: slotmap::Key, V: Default, EdgeID: Key, E: Default, FaceID: Key, F: 
     pub fn is_connected(&self) -> bool {
         hutspot::graph::find_ccs(&self.vert_ids(), self.neighbor_function_primal()).len() == 1
     }
+
+    #[must_use]
+    pub fn wedges(&self, a: VertID, b: VertID, c: VertID) -> (Vec<VertID>, Vec<VertID>) {
+        // First wedge is a to c (around b)
+        let wedge1 = [a]
+            .into_iter()
+            .chain(
+                self.vneighbors(b)
+                    .clone()
+                    .into_iter()
+                    .cycle()
+                    .skip_while(|&v| v != a)
+                    .skip(1)
+                    .take_while(|&v| v != c),
+            )
+            .chain([c].into_iter())
+            .collect_vec();
+
+        // Second wedge is c to a (around b)
+        let wedge2 = [c]
+            .into_iter()
+            .chain(
+                self.vneighbors(b)
+                    .clone()
+                    .into_iter()
+                    .cycle()
+                    .skip_while(|&v| v != c)
+                    .skip(1)
+                    .take_while(|&v| v != a),
+            )
+            .chain([a].into_iter())
+            .collect_vec();
+
+        // Return the wedges
+        (wedge1, wedge2)
+    }
 }
 
 impl<VertID: Key, V: Default, EdgeID: Key, E: Default, FaceID: Key, F: Default + Clone> Douconel<VertID, V, EdgeID, E, FaceID, F> {
