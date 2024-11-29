@@ -268,6 +268,14 @@ impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key
         (self.normal(f1) + self.normal(f2)).normalize()
     }
 
+    // Get the angle between two edges at a common vertex.
+    #[must_use]
+    pub fn vertex_angle(&self, a: VertID, b: VertID, c: VertID) -> Float {
+        let a_b = self.position(b) - self.position(a);
+        let b_c = self.position(b) - self.position(c);
+        self.vec_angle(a_b, b_c)
+    }
+
     // Weight function
     pub fn weight_function_euclidean(&self) -> impl Fn(VertID, VertID) -> OrderedFloat<Float> + '_ {
         |a, b| OrderedFloat(self.distance(a, b))
@@ -432,12 +440,12 @@ impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key
 
             println!("t: {}", t);
 
-            if t < 1e-3 {
+            if t < 1e-6 {
                 // The intersection is at the start of the edge, we do not have to split, we simply return
                 return Some(a);
             }
 
-            if t > 1. - 1e-3 {
+            if t > 1. - 1e-6 {
                 // The intersection is at the end of the edge, we do not have to split, we simply return
                 return Some(b);
             }
