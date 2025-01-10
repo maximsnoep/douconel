@@ -5,11 +5,6 @@ use itertools::Itertools;
 use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize};
 use slotmap::Key;
-use std::{
-    fs::OpenOptions,
-    io::{BufRead, BufReader},
-    path::PathBuf,
-};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -113,47 +108,6 @@ impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key
             Ok((douconel, vertex_map, face_map))
         } else {
             non_embedded.map_err(EmbeddedMeshError::MeshError)
-        }
-    }
-
-    pub fn obj_to_elements(reader: impl BufRead) -> Result<(Vec<Vector3D>, Vec<Vec<usize>>), obj::ObjError> {
-        let obj = obj::ObjData::load_buf(reader)?;
-        let verts = obj.position.iter().map(|v| Vector3D::new(v[0].into(), v[1].into(), v[2].into())).collect_vec();
-        let faces = obj.objects[0].groups[0]
-            .polys
-            .iter()
-            .map(|f| f.0.iter().map(|v| v.0).collect_vec())
-            .collect_vec();
-        Ok((verts, faces))
-    }
-
-    pub fn stl_to_elements(mut reader: impl BufRead + std::io::Seek) -> Result<(Vec<Vector3D>, Vec<Vec<usize>>), std::io::Error> {
-        let stl = stl_io::read_stl(&mut reader)?;
-        let verts = stl.vertices.iter().map(|v| Vector3D::new(v[0].into(), v[1].into(), v[2].into())).collect_vec();
-        let faces = stl.faces.iter().map(|f| f.vertices.to_vec()).collect_vec();
-        Ok((verts, faces))
-    }
-
-    pub fn from_file(path: &PathBuf) -> Result<(Self, BiHashMap<usize, VertID>, BiHashMap<usize, FaceID>), EmbeddedMeshError<VertID, FaceID>> {
-        match OpenOptions::new().read(true).open(path) {
-            Ok(file) => match path.extension().unwrap().to_str() {
-                Some("obj") => match Self::obj_to_elements(BufReader::new(file)) {
-                    Ok((verts, faces)) => Self::from_embedded_faces(&faces, &verts),
-                    Err(e) => Err(EmbeddedMeshError::MeshError(MeshError::Unknown(format!(
-                        "Something went wrong while reading the OBJ file: {path:?}\nErr: {e}"
-                    )))),
-                },
-                Some("stl") => match Self::stl_to_elements(BufReader::new(file)) {
-                    Ok((verts, faces)) => Self::from_embedded_faces(&faces, &verts),
-                    Err(e) => Err(EmbeddedMeshError::MeshError(MeshError::Unknown(format!(
-                        "Something went wrong while reading the STL file: {path:?}\nErr: {e}"
-                    )))),
-                },
-                _ => Err(EmbeddedMeshError::MeshError(MeshError::Unknown(format!("Unknown file extension: {path:?}",)))),
-            },
-            Err(e) => Err(EmbeddedMeshError::MeshError(MeshError::Unknown(format!(
-                "Cannot read file: {path:?}\nErr: {e}"
-            )))),
         }
     }
 
@@ -416,16 +370,6 @@ impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key
         //     b_c2_distance
         // );
 
-        println!("a_position: {:?}", a_position);
-        println!("b_position: {:?}", b_position);
-        println!("c1_position: {:?}", c1_position);
-        println!("c2_position: {:?}", c2_position);
-
-        println!("a_c1_distance: {}", a_c1_distance);
-        println!("b_c1_distance: {}", b_c1_distance);
-        println!("a_c2_distance: {}", a_c2_distance);
-        println!("b_c2_distance: {}", b_c2_distance);
-
         // Find intersection of a_b and c1_c2
         // Calculate the intersection of the lines a_b and c1_c2
 
@@ -433,12 +377,8 @@ impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key
             // The y coordinate of the intersection is 0
             assert!(intersection[1].abs() == 0.);
 
-            println!("intersection: {:?}", intersection);
-
             // The portion of the edge a_b that is before the intersection
             let t = intersection[0] / a_b_distance;
-
-            println!("t: {}", t);
 
             if t < 1e-6 {
                 // The intersection is at the start of the edge, we do not have to split, we simply return
@@ -472,6 +412,15 @@ impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key
             return Some(split_vertex);
         } else {
             return None;
+        }
+    }
+
+    pub fn refine(&mut self, n: usize) {
+        for _ in 0..n {
+            // find the longest edge
+            let longest_edge = self.edges.keys().max_by_key(|&edge_id| OrderedFloat(self.length(edge_id))).unwrap();
+            let (a, b) = self.endpoints(longest_edge);
+            self.splip_edge(a, b);
         }
     }
 }

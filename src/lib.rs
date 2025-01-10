@@ -3,6 +3,7 @@
 pub mod douconel;
 pub mod douconel_bevy;
 pub mod douconel_embedded;
+pub mod douconel_io;
 pub mod douconel_petgraph;
 
 #[cfg(test)]
