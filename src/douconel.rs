@@ -318,6 +318,18 @@ impl<VertID: slotmap::Key, V: Default, EdgeID: Key, E: Default, FaceID: Key, F: 
         }
     }
 
+    // Returns the four edges around a given edge.
+    #[inline]
+    #[must_use]
+    pub fn quad(&self, id: EdgeID) -> [EdgeID; 4] {
+        let edge0 = self.next(id);
+        let edge1 = self.next(edge0);
+        let twin = self.twin(id);
+        let edge2 = self.next(twin);
+        let edge3 = self.next(edge2);
+        [edge0, edge1, edge2, edge3]
+    }
+
     // Returns the face of the given edge.
     // Panics if the edge has no face defined or if the face does not exist.
     #[inline]
