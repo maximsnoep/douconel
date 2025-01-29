@@ -409,6 +409,34 @@ impl<VertID: slotmap::Key, V: Default, EdgeID: Key, E: Default, FaceID: Key, F: 
             .map(|(a, b)| [a, b])
     }
 
+    #[inline]
+    #[must_use]
+    pub fn common_endpoint(&self, edge_a: EdgeID, edge_b: EdgeID) -> Option<VertID> {
+        let (a0, a1) = self.endpoints(edge_a);
+        let (b0, b1) = self.endpoints(edge_b);
+        if a0 == b0 || a0 == b1 {
+            Some(a0)
+        } else if a1 == b0 || a1 == b1 {
+            Some(a1)
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn verts_to_edges(&self, verts: &[VertID]) -> Vec<EdgeID> {
+        verts
+            .iter()
+            .flat_map(|&vert_id| {
+                self.outgoing(vert_id)
+                    .into_iter()
+                    .filter(|&edge_id| verts.contains(&self.toor(edge_id)))
+                    .collect_vec()
+            })
+            .collect_vec()
+    }
+
     // Returns the edge between the two vertices. Returns None if the vertices are not connected.
     #[inline]
     #[must_use]
