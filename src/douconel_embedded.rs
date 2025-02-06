@@ -284,6 +284,22 @@ impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key
             )
         }
     }
+
+    #[must_use]
+    pub fn wedge_alpha(&self, (b, wedge): (VertID, &[VertID])) -> f64 {
+        wedge.windows(2).map(|vs| self.vertex_angle(vs[0], b, vs[1])).sum::<f64>()
+    }
+
+    #[must_use]
+    pub fn shortest_wedge(&self, a: VertID, b: VertID, c: VertID) -> (Vec<VertID>, f64, bool) {
+        let (w1, w2) = self.wedges(a, b, c);
+        let (a1, a2) = (self.wedge_alpha((b, &w1)), self.wedge_alpha((b, &w2)));
+        if a1 < a2 {
+            (w1, a1, true)
+        } else {
+            (w2, a2, false)
+        }
+    }
 }
 
 impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key, F: Default + Clone> Douconel<VertID, V, EdgeID, E, FaceID, F> {
