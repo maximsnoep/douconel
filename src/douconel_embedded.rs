@@ -291,13 +291,13 @@ impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key
     }
 
     #[must_use]
-    pub fn shortest_wedge(&self, a: VertID, b: VertID, c: VertID) -> (Vec<VertID>, f64, bool) {
+    pub fn shortest_wedge(&self, a: VertID, b: VertID, c: VertID) -> (Vec<VertID>, f64) {
         let (w1, w2) = self.wedges(a, b, c);
         let (a1, a2) = (self.wedge_alpha((b, &w1)), self.wedge_alpha((b, &w2)));
         if a1 < a2 {
-            (w1, a1, true)
+            (w1, a1)
         } else {
-            (w2, a2, false)
+            (w2.into_iter().rev().collect_vec(), a2)
         }
     }
 }
@@ -396,12 +396,12 @@ impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key
             // The portion of the edge a_b that is before the intersection
             let t = intersection[0] / a_b_distance;
 
-            if t < 1e-6 {
+            if t < 0.00001 {
                 // The intersection is at the start of the edge, we do not have to split, we simply return
                 return Some(a);
             }
 
-            if t > 1. - 1e-6 {
+            if t > 0.99999 {
                 // The intersection is at the end of the edge, we do not have to split, we simply return
                 return Some(b);
             }
