@@ -343,7 +343,8 @@ impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key
         let x = (d * d - r * r + R * R) / (2. * d);
         let y = -(R * R - x * x).sqrt();
         let c1_position = Vector2D::new(x, y);
-        assert!(c1_position[1] < 0.);
+        // println!("c1 position: {:?}", c1_position);
+        assert!(c1_position[1] < 0., "c1_position: {:?}", c1_position);
 
         // assert!(
         //     a_position.metric_distance(&c1_position) == a_c1_distance,
@@ -371,7 +372,8 @@ impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key
         let x = (d * d - r * r + R * R) / (2. * d);
         let y = (R * R - x * x).sqrt();
         let c2_position = Vector2D::new(x, y);
-        assert!(c2_position[1] > 0.);
+        // println!("c2 position: {:?}", c2_position);
+        assert!(c2_position[1] > 0., "c2_position: {:?}", c2_position);
 
         // assert!(
         //     a_position.metric_distance(&c2_position) == a_c2_distance,
@@ -389,21 +391,21 @@ impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key
         // Find intersection of a_b and c1_c2
         // Calculate the intersection of the lines a_b and c1_c2
 
-        if let Some((intersection, _)) = hutspot::geom::calculate_2d_lineseg_intersection(a_position, b_position, c1_position, c2_position) {
+        if let Some((intersection, intersection_type)) = hutspot::geom::calculate_2d_lineseg_intersection(a_position, b_position, c1_position, c2_position) {
             // The y coordinate of the intersection is 0
             assert!(intersection[1].abs() == 0.);
 
             // The portion of the edge a_b that is before the intersection
             let t = intersection[0] / a_b_distance;
 
-            if t < 0.00001 {
-                // The intersection is at the start of the edge, we do not have to split, we simply return
-                return Some(a);
-            }
-
-            if t > 0.99999 {
-                // The intersection is at the end of the edge, we do not have to split, we simply return
-                return Some(b);
+            if intersection_type == hutspot::geom::IntersectionType::Endpoint {
+                if t < 0.5 {
+                    // The intersection is at the start of the edge, we do not have to split, we simply return
+                    return Some(a);
+                } else {
+                    // The intersection is at the end of the edge, we do not have to split, we simply return
+                    return Some(b);
+                }
             }
 
             // Calculate the position of the split vertex in 3D
