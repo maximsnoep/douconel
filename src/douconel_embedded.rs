@@ -329,6 +329,11 @@ impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key
         let b_c2_distance = self.length(b_c2);
         let a_b_distance = self.length(a_b);
 
+        // if a_c1_distance < 1e-6 || b_c1_distance < 1e-6 || a_c2_distance < 1e-6 || b_c2_distance < 1e-6 || a_b_distance < 1e-6 {
+        //     println!("oopsie ");
+        //     return None;
+        // }
+
         let a_position = Vector2D::new(0., 0.);
         let b_position = Vector2D::new(a_b_distance, 0.);
 
@@ -341,25 +346,11 @@ impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key
         let d = a_b_distance;
 
         let x = (d * d - r * r + R * R) / (2. * d);
-        let y = -(R * R - x * x).sqrt();
-        let c1_position = Vector2D::new(x, y);
-        // println!("c1 position: {:?}", c1_position);
-        assert!(c1_position[1] < 0., "c1_position: {:?}", c1_position);
+        let yy = R * R - x * x;
+        let y = if yy < 0. { 0. } else { -(yy.sqrt()) };
 
-        // assert!(
-        //     a_position.metric_distance(&c1_position) == a_c1_distance,
-        //     "new distance: {}, a_c1_distance: {}, b_c1_distance: {}",
-        //     a_position.metric_distance(&c1_position),
-        //     a_c1_distance,
-        //     b_c1_distance
-        // );
-        // assert!(
-        //     b_position.metric_distance(&c1_position) == b_c1_distance,
-        //     "new distance: {}, b_c1_distance: {}, a_c1_distance: {}",
-        //     b_position.metric_distance(&c1_position),
-        //     b_c1_distance,
-        //     a_c1_distance
-        // );
+        let c1_position = Vector2D::new(x, y);
+        assert!(c1_position[1] <= 0., "c1_position: {:?}", c1_position);
 
         // Calculate the position of c2
         // Draw circle with radius a_c2_distance and center a_position
@@ -370,67 +361,49 @@ impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key
         let d = a_b_distance;
 
         let x = (d * d - r * r + R * R) / (2. * d);
-        let y = (R * R - x * x).sqrt();
+        let yy = R * R - x * x;
+        let y = if yy < 0. { 0. } else { yy.sqrt() };
         let c2_position = Vector2D::new(x, y);
-        // println!("c2 position: {:?}", c2_position);
-        assert!(c2_position[1] > 0., "c2_position: {:?}", c2_position);
+        assert!(c2_position[1] >= 0., "c2_position: {:?}", c2_position);
 
-        // assert!(
-        //     a_position.metric_distance(&c2_position) == a_c2_distance,
-        //     "new distance: {}, a_c2_distance: {}",
-        //     a_position.metric_distance(&c2_position),
-        //     a_c2_distance
-        // );
-        // assert!(
-        //     b_position.metric_distance(&c2_position) == b_c2_distance,
-        //     "new distance: {}, b_c2_distance: {}",
-        //     b_position.metric_distance(&c2_position),
-        //     b_c2_distance
-        // );
+        println!("a_position: {a_position:?}");
+        println!("b_position: {b_position:?}");
+        println!("c1_position: {c1_position:?}");
+        println!("c2_position: {c2_position:?}");
 
         // Find intersection of a_b and c1_c2
         // Calculate the intersection of the lines a_b and c1_c2
 
-        if let Some((intersection, intersection_type)) = hutspot::geom::calculate_2d_lineseg_intersection(a_position, b_position, c1_position, c2_position) {
-            // The y coordinate of the intersection is 0
-            assert!(intersection[1].abs() == 0.);
+        let (intersection, _) = hutspot::geom::calculate_2d_lineseg_intersection(a_position, b_position, c1_position, c2_position).unwrap();
+        // assert!(intersection[1].abs() == 0., "{intersection:?}");
 
-            // The portion of the edge a_b that is before the intersection
-            let t = intersection[0] / a_b_distance;
+        // The portion of the edge a_b that is before the intersection
+        let t = intersection[0] / a_b_distance;
 
-            if intersection_type == hutspot::geom::IntersectionType::Endpoint {
-                if t < 0.5 {
-                    // The intersection is at the start of the edge, we do not have to split, we simply return
-                    return Some(a);
-                } else {
-                    // The intersection is at the end of the edge, we do not have to split, we simply return
-                    return Some(b);
-                }
-            }
+        println!("t: {}", t);
 
-            // Calculate the position of the split vertex in 3D
-            let split_position = self.position(a) + (self.position(b) - self.position(a)) * t;
-
-            // Split edge a_b
-            let (split_vertex, _) = self.split_edge(a_b);
-
-            // There exists an edge between c1 and split_vertex and c2 and split_vertex
-            assert!(self.edge_between_verts(c1, split_vertex).is_some());
-            assert!(self.edge_between_verts(c2, split_vertex).is_some());
-
-            // Move the split vertex to the correct position
-            self.verts.get_mut(split_vertex).unwrap().set_position(split_position);
-
-            let c1_intersection_distance = self.length(self.edge_between_verts(c1, split_vertex).unwrap().0);
-            let c2_intersection_distance = self.length(self.edge_between_verts(c2, split_vertex).unwrap().0);
-
-            assert!(b_c1_distance + b_c2_distance > c1_intersection_distance + c2_intersection_distance);
-            assert!(a_c1_distance + a_c2_distance > c1_intersection_distance + c2_intersection_distance);
-
-            return Some(split_vertex);
-        } else {
-            return None;
+        if t < 0.01 {
+            return Some(a);
         }
+
+        if t > 0.99 {
+            return Some(b);
+        }
+
+        // Calculate the position of the split vertex in 3D
+        let split_position = self.position(a) + (self.position(b) - self.position(a)) * t;
+
+        // Split edge a_b
+        let (split_vertex, _) = self.split_edge(a_b);
+
+        // There exists an edge between c1 and split_vertex and c2 and split_vertex
+        assert!(self.edge_between_verts(c1, split_vertex).is_some());
+        assert!(self.edge_between_verts(c2, split_vertex).is_some());
+
+        // Move the split vertex to the correct position
+        self.verts.get_mut(split_vertex).unwrap().set_position(split_position);
+
+        return Some(split_vertex);
     }
 
     pub fn refine(&mut self, n: usize) {
