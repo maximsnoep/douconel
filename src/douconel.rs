@@ -534,7 +534,7 @@ impl<VertID: slotmap::Key, V: Default, EdgeID: Key, E: Default, FaceID: Key, F: 
     }
 
     pub fn neighbor_function_edgegraph(&self) -> impl Fn(EdgeID) -> Vec<EdgeID> + '_ {
-        |e_id| self.outgoing(self.endpoints(e_id).1)
+        |e_id| vec![self.next(e_id), self.next(self.next(e_id)), self.twin(e_id)]
     }
 
     #[inline]

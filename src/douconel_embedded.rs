@@ -366,27 +366,34 @@ impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key
         let c2_position = Vector2D::new(x, y);
         assert!(c2_position[1] >= 0., "c2_position: {:?}", c2_position);
 
-        println!("a_position: {a_position:?}");
-        println!("b_position: {b_position:?}");
-        println!("c1_position: {c1_position:?}");
-        println!("c2_position: {c2_position:?}");
+        // println!("a_position: {a_position:?}");
+        // println!("b_position: {b_position:?}");
+        // println!("c1_position: {c1_position:?}");
+        // println!("c2_position: {c2_position:?}");
 
         // Find intersection of a_b and c1_c2
         // Calculate the intersection of the lines a_b and c1_c2
 
-        let (intersection, _) = hutspot::geom::calculate_2d_lineseg_intersection(a_position, b_position, c1_position, c2_position).unwrap();
+        let intersection_maybe = hutspot::geom::calculate_2d_lineseg_intersection(a_position, b_position, c1_position, c2_position);
+
+        if intersection_maybe.is_none() {
+            return None;
+        }
+
+        let intersection = intersection_maybe.unwrap().0;
+
         // assert!(intersection[1].abs() == 0., "{intersection:?}");
 
         // The portion of the edge a_b that is before the intersection
         let t = intersection[0] / a_b_distance;
 
-        println!("t: {}", t);
+        // println!("t: {}", t);
 
-        if t < 0.01 {
+        if t < 0.001 {
             return Some(a);
         }
 
-        if t > 0.99 {
+        if t > 0.999 {
             return Some(b);
         }
 
