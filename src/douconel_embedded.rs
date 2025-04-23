@@ -58,15 +58,10 @@ impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key
         let non_embedded = Self::from_faces(faces);
         if let Ok((mut douconel, vertex_map, face_map)) = non_embedded {
             for (inp_vertex_id, inp_vertex_position) in vertex_positions.iter().copied().enumerate() {
-                let vertex_id = vertex_map
-                    .get_by_left(&inp_vertex_id)
-                    .copied()
-                    .unwrap_or_else(|| panic!("V:{inp_vertex_id} not initialized"));
-                douconel
-                    .verts
-                    .get_mut(vertex_id)
-                    .unwrap_or_else(|| panic!("V:{vertex_id:?} not initialized"))
-                    .set_position(inp_vertex_position);
+                let vertex_id = vertex_map.get_by_left(&inp_vertex_id).copied().unwrap_or_default();
+                if let Some(vert) = douconel.verts.get_mut(vertex_id) {
+                    vert.set_position(inp_vertex_position);
+                }
             }
 
             // Make sure the mesh is polygonal
