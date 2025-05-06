@@ -4,8 +4,8 @@ version = "0.0.1"
 edition = "2024"
 
 [dependencies]
-hutspot = { path = "../hutspot" }
-# hutspot = { git = "https://github.com/maximsnoep/hutspot" }
+# hutspot = { path = "../hutspot" }
+hutspot = { git = "https://github.com/maximsnoep/hutspot" }
 
 # core
 itertools = "0.14.0"
