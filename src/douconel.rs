@@ -514,19 +514,19 @@ impl<VertID: slotmap::Key, V: Default, EdgeID: Key, E: Default, FaceID: Key, F: 
     // Return `n` random vertices.
     #[must_use]
     pub fn random_verts(&self, n: usize) -> Vec<VertID> {
-        self.verts.keys().choose_multiple(&mut rand::thread_rng(), n)
+        self.verts.keys().choose_multiple(&mut rand::rng(), n)
     }
 
     // Return `n` random edges.
     #[must_use]
     pub fn random_edges(&self, n: usize) -> Vec<EdgeID> {
-        self.edges.keys().choose_multiple(&mut rand::thread_rng(), n)
+        self.edges.keys().choose_multiple(&mut rand::rng(), n)
     }
 
     // Return `n` random faces.
     #[must_use]
     pub fn random_faces(&self, n: usize) -> Vec<FaceID> {
-        self.faces.keys().choose_multiple(&mut rand::thread_rng(), n)
+        self.faces.keys().choose_multiple(&mut rand::rng(), n)
     }
 
     pub fn neighbor_function_primal(&self) -> impl Fn(VertID) -> Vec<VertID> + '_ {

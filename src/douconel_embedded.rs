@@ -93,7 +93,12 @@ impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key
                         let a_v = douconel.position(douconel.toor(edge_a));
                         let b_u = douconel.position(douconel.root(edge_b));
                         let b_v = douconel.position(douconel.toor(edge_b));
-                        if let Some((_, hutspot::geom::IntersectionType::Proper)) = hutspot::geom::calculate_3d_lineseg_intersection(a_u, a_v, b_u, b_v) {
+                        if hutspot::geom::calculate_3d_lineseg_intersection(a_u, a_v, b_u, b_v).is_some()
+                            && a_u != b_u
+                            && a_u != b_v
+                            && a_v != b_u
+                            && a_v != b_v
+                        {
                             return Err(EmbeddedMeshError::FaceNotSimple(face_id));
                         }
                     }
@@ -289,11 +294,25 @@ impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key
     pub fn shortest_wedge(&self, a: VertID, b: VertID, c: VertID) -> (Vec<VertID>, f64) {
         let (w1, w2) = self.wedges(a, b, c);
         let (a1, a2) = (self.wedge_alpha((b, &w1)), self.wedge_alpha((b, &w2)));
-        if a1 < a2 {
-            (w1, a1)
-        } else {
-            (w2.into_iter().rev().collect_vec(), a2)
-        }
+        if a1 < a2 { (w1, a1) } else { (w2.into_iter().rev().collect_vec(), a2) }
+    }
+
+    #[must_use]
+    pub fn get_aabb(&self) -> (Vector3D, Vector3D) {
+        // An axis-aligned bounding box, defined by:
+        // a center,
+        // the distances from the center to each faces along the axis, the faces are orthogonal to the axis.
+
+        let max_x = self.verts.values().map(|v| OrderedFloat(v.position()[0])).max().unwrap().0;
+        let min_x = self.verts.values().map(|v| OrderedFloat(v.position()[0])).min().unwrap().0;
+        let max_y = self.verts.values().map(|v| OrderedFloat(v.position()[1])).max().unwrap().0;
+        let min_y = self.verts.values().map(|v| OrderedFloat(v.position()[1])).min().unwrap().0;
+        let max_z = self.verts.values().map(|v| OrderedFloat(v.position()[2])).max().unwrap().0;
+        let min_z = self.verts.values().map(|v| OrderedFloat(v.position()[2])).min().unwrap().0;
+        let center = Vector3D::new((max_x + min_x) / 2., (max_y + min_y) / 2., (max_z + min_z) / 2.);
+        let half_extents = Vector3D::new((max_x - min_x) / 2., (max_y - min_y) / 2., (max_z - min_z) / 2.);
+
+        (center, half_extents)
     }
 }
 
@@ -375,7 +394,7 @@ impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key
             return None;
         }
 
-        let intersection = intersection_maybe.unwrap().0;
+        let intersection = intersection_maybe.unwrap();
 
         // assert!(intersection[1].abs() == 0., "{intersection:?}");
 
