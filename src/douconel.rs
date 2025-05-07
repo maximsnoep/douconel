@@ -28,46 +28,49 @@ pub type Empty = u8;
 
 // This is a struct that defines a mesh with vertices, edges, and faces.
 // This mesh is:
-//      a closed 2-manifold: Each edge corresponds to exactly two faces.
-//      connected: There exists a path between any two vertices.
-//      orientable: There exists a consistent normal for each face.
+// 1) closed 2-manifold: Each edge corresponds to exactly two faces.
+// 2) connected: There exists a path between any two vertices.
+// 3) orientable: There exists a consistent normal for each face.
 // These requirements will be true per construction.
-// To implement this mesh, we use the doubly connected edge list (DCEL) data structure, also known as half-edge data structure.
+// We use a doubly connected edge list (DCEL) data structure, also known as the half-edge data structure (HEDS).
 #[derive(Default, Clone, Debug, Serialize, Deserialize)]
 pub struct Douconel<VertID: Key, V, EdgeID: Key, E, FaceID: Key, F> {
     pub verts: SlotMap<VertID, V>,
     pub edges: SlotMap<EdgeID, E>,
     pub faces: SlotMap<FaceID, F>,
-
     edge_root: SecondaryMap<EdgeID, VertID>,
     edge_face: SecondaryMap<EdgeID, FaceID>,
     edge_next: SecondaryMap<EdgeID, EdgeID>,
     edge_twin: SecondaryMap<EdgeID, EdgeID>,
-
     vert_rep: SecondaryMap<VertID, EdgeID>,
     face_rep: SecondaryMap<FaceID, EdgeID>,
 }
 
-impl<VertID: slotmap::Key, V: Default, EdgeID: Key, E: Default, FaceID: Key, F: Default> Douconel<VertID, V, EdgeID, E, FaceID, F> {
-    // Creates a new, empty Douconel.
+impl<VertID: Key, V: Default, EdgeID: Key, E: Default, FaceID: Key, F: Default> Douconel<VertID, V, EdgeID, E, FaceID, F> {
+    // Creates an empty Douconel.
     #[must_use]
-    fn new() -> Self {
-        Self {
-            verts: SlotMap::with_key(),
-            edges: SlotMap::with_key(),
-            faces: SlotMap::with_key(),
-            edge_root: SecondaryMap::new(),
-            edge_face: SecondaryMap::new(),
-            edge_next: SecondaryMap::new(),
-            edge_twin: SecondaryMap::new(),
-            vert_rep: SecondaryMap::new(),
-            face_rep: SecondaryMap::new(),
-        }
+    fn empty() -> Self {
+        Self::default()
+    }
+
+    // Adds a vertex to the mesh and returns its ID.
+    fn add_vertex(&mut self) -> VertID {
+        self.verts.insert(V::default())
+    }
+
+    // Adds an edge to the mesh and returns its ID.
+    fn add_edge(&mut self) -> EdgeID {
+        self.edges.insert(E::default())
+    }
+
+    // Adds a face to the mesh and returns its ID.
+    fn add_face(&mut self) -> FaceID {
+        self.faces.insert(F::default())
     }
 
     // Construct a DCEL from a list of faces, where each face is a list of vertex indices.
     pub fn from_faces(faces: &[Vec<usize>]) -> Result<(Self, BiHashMap<usize, VertID>, BiHashMap<usize, FaceID>), MeshError<VertID>> {
-        let mut mesh = Self::new();
+        let mut mesh = Self::empty();
 
         // 1. Create the vertices.
         //      trivial; get all unique input vertices (from the faces), and create a vertex for each of them
@@ -103,51 +106,37 @@ impl<VertID: slotmap::Key, V: Default, EdgeID: Key, E: Default, FaceID: Key, F: 
         let vertices = faces.iter().flatten().unique().copied().collect_vec();
 
         for inp_vert_id in vertices {
-            let vert_id = mesh.verts.insert(V::default());
-            vertex_pointers.insert(inp_vert_id, vert_id);
+            vertex_pointers.insert(inp_vert_id, mesh.add_vertex());
         }
 
         // 2. Create the faces with its (half)edges.
         // Need mapping between endpoints and edges for later use (assigning twins).
         let mut endpoints_to_edges = HashMap::<(VertID, VertID), EdgeID>::new();
-        for (inp_face_id, inp_face_edges) in faces.iter().enumerate() {
-            let face_id = mesh.faces.insert(F::default());
-
+        for (inp_face_id, inp_face_verts) in faces.iter().enumerate() {
+            let face_id = mesh.add_face();
             face_pointers.insert(inp_face_id, face_id);
 
-            let mut conc = inp_face_edges.clone();
-            conc.push(inp_face_edges[0]); // Re-append the first to loop back
-
-            let edges = conc
-                .iter()
-                .tuple_windows()
-                .map(|(inp_start_vertex, inp_end_vertex)| {
-                    (
-                        vertex_pointers
-                            .get_by_left(inp_start_vertex)
-                            .copied()
-                            .unwrap_or_else(|| panic!("V:{inp_start_vertex} does not have a vertex pointer")),
-                        vertex_pointers
-                            .get_by_left(inp_end_vertex)
-                            .copied()
-                            .unwrap_or_else(|| panic!("V:{inp_end_vertex} does not have a vertex pointer")),
-                    )
-                })
-                .collect_vec();
-
             let mut edge_ids = vec![];
-            for (start_vertex, end_vertex) in edges {
-                let edge_id = mesh.edges.insert(E::default());
-
-                if endpoints_to_edges.insert((start_vertex, end_vertex), edge_id).is_some() {
-                    return Err(MeshError::DuplicateEdge(start_vertex, end_vertex));
-                };
-
-                mesh.face_rep.insert(face_id, edge_id);
-                mesh.vert_rep.insert(start_vertex, edge_id);
-                mesh.edge_root.insert(edge_id, start_vertex);
-                mesh.edge_face.insert(edge_id, face_id);
-                edge_ids.push(edge_id);
+            for i in 0..inp_face_verts.len() {
+                let inp_start_vertex = inp_face_verts[i];
+                let inp_end_vertex = inp_face_verts[(i + 1) % inp_face_verts.len()];
+                if let (Some(&start_vertex), Some(&end_vertex)) = (vertex_pointers.get_by_left(&inp_start_vertex), vertex_pointers.get_by_left(&inp_end_vertex))
+                {
+                    let edge_id = mesh.add_edge();
+                    let already_exists = endpoints_to_edges.insert((start_vertex, end_vertex), edge_id).is_some();
+                    if already_exists {
+                        return Err(MeshError::DuplicateEdge(start_vertex, end_vertex));
+                    }
+                    edge_ids.push(edge_id);
+                    mesh.face_rep.insert(face_id, edge_id);
+                    mesh.vert_rep.insert(start_vertex, edge_id);
+                    mesh.edge_root.insert(edge_id, start_vertex);
+                    mesh.edge_face.insert(edge_id, face_id);
+                } else {
+                    return Err(MeshError::Unknown(format!(
+                        "V:{inp_start_vertex} or V:{inp_end_vertex} does not have a vertex pointer"
+                    )));
+                }
             }
 
             // Linking each edge to its next edge in the face
@@ -159,7 +148,7 @@ impl<VertID: slotmap::Key, V: Default, EdgeID: Key, E: Default, FaceID: Key, F: 
         // 3. Assign twins.
         for (&(vert_a, vert_b), &edge_id) in &endpoints_to_edges {
             // Retrieve the twin edge
-            if let Some(twin_id) = endpoints_to_edges.get(&(vert_b, vert_a)).copied() {
+            if let Some(&twin_id) = endpoints_to_edges.get(&(vert_b, vert_a)) {
                 // Assign twins
                 mesh.edge_twin.insert(edge_id, twin_id);
                 mesh.edge_twin.insert(twin_id, edge_id);
