@@ -21,3 +21,4 @@ bimap = "0.6.3" # for face and vertex ID maps
 stl_io = "0.8.5"
 obj = "0.10.2"
 bevy = "0.16.0"
+petgraph = "0.8.1"
