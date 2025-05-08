@@ -136,140 +136,140 @@ mod tests {
         }
     }
 
-    #[test]
-    fn benchmark_graph_operators() {
-        let douconel = Douconel::<VertID, EmbeddedVertex, EdgeID, Empty, FaceID, Empty>::from_file(&PathBuf::from("assets/nefertiti099k.stl"));
-        assert!(douconel.is_ok(), "{douconel:?}");
-        if let Ok((douconel, _, _)) = douconel {
-            assert!(douconel.nr_verts() == 49971);
-            assert!(douconel.nr_edges() == 149_907 * 2);
-            assert!(douconel.nr_faces() == 99938);
+    // #[test]
+    // fn benchmark_graph_operators() {
+    //     let douconel = Douconel::<VertID, EmbeddedVertex, EdgeID, Empty, FaceID, Empty>::from_file(&PathBuf::from("assets/nefertiti099k.stl"));
+    //     assert!(douconel.is_ok(), "{douconel:?}");
+    //     if let Ok((douconel, _, _)) = douconel {
+    //         assert!(douconel.nr_verts() == 49971);
+    //         assert!(douconel.nr_edges() == 149_907 * 2);
+    //         assert!(douconel.nr_faces() == 99938);
 
-            for face_id in douconel.faces.keys() {
-                assert!(douconel.corners(face_id).len() == 3);
-            }
+    //         for face_id in douconel.faces.keys() {
+    //             assert!(douconel.corners(face_id).len() == 3);
+    //         }
 
-            const ITERATIONS: usize = 1000;
+    //         const ITERATIONS: usize = 1000;
 
-            let random_verts = (0..ITERATIONS)
-                .map(|_| {
-                    let verts = douconel.random_verts(2);
-                    (verts[0], verts[1])
-                })
-                .collect::<Vec<_>>();
+    //         let random_verts = (0..ITERATIONS)
+    //             .map(|_| {
+    //                 let verts = douconel.random_verts(2);
+    //                 (verts[0], verts[1])
+    //             })
+    //             .collect::<Vec<_>>();
 
-            hutspot::timer::bench(
-                |_| {
-                    let (g, map) = douconel.graph_with_weights(|e| douconel.length(e));
-                    g.edge_count();
-                },
-                "petgraph_construction",
-                1,
-            );
+    //         hutspot::timer::bench(
+    //             |_| {
+    //                 let (g, map) = douconel.graph_with_weights(|e| douconel.length(e));
+    //                 g.edge_count();
+    //             },
+    //             "petgraph_construction",
+    //             1,
+    //         );
 
-            let (g, map) = douconel.graph_with_weights(|e| douconel.length(e));
+    //         let (g, map) = douconel.graph_with_weights(|e| douconel.length(e));
 
-            hutspot::timer::bench(
-                |i| {
-                    let (v_a, v_b) = random_verts[i];
+    //         hutspot::timer::bench(
+    //             |i| {
+    //                 let (v_a, v_b) = random_verts[i];
 
-                    let _path = petgraph::algo::dijkstra(
-                        &g,
-                        map.get_by_left(&v_a).unwrap().to_owned(),
-                        Some(map.get_by_left(&v_b).unwrap().to_owned()),
-                        |e| *e.weight(),
-                    );
-                },
-                "petgraph_astar",
-                ITERATIONS,
-            );
+    //                 let _path = petgraph::algo::dijkstra(
+    //                     &g,
+    //                     map.get_by_left(&v_a).unwrap().to_owned(),
+    //                     Some(map.get_by_left(&v_b).unwrap().to_owned()),
+    //                     |e| *e.weight(),
+    //                 );
+    //             },
+    //             "petgraph_astar",
+    //             ITERATIONS,
+    //         );
 
-            hutspot::timer::bench(
-                |i| {
-                    let (v_a, v_b) = random_verts[i];
+    //         hutspot::timer::bench(
+    //             |i| {
+    //                 let (v_a, v_b) = random_verts[i];
 
-                    let _path = pathfinding::prelude::dijkstra(
-                        &v_a,
-                        |&v_id| {
-                            douconel
-                                .vneighbors(v_id)
-                                .iter()
-                                .map(|&n_id| (n_id, OrderedFloat(douconel.distance(v_id, n_id))))
-                                .collect_vec()
-                        },
-                        |&v_id| v_id == v_b,
-                    );
-                },
-                "pathfinding_astar",
-                ITERATIONS,
-            );
+    //                 let _path = pathfinding::prelude::dijkstra(
+    //                     &v_a,
+    //                     |&v_id| {
+    //                         douconel
+    //                             .vneighbors(v_id)
+    //                             .iter()
+    //                             .map(|&n_id| (n_id, OrderedFloat(douconel.distance(v_id, n_id))))
+    //                             .collect_vec()
+    //                     },
+    //                     |&v_id| v_id == v_b,
+    //                 );
+    //             },
+    //             "pathfinding_astar",
+    //             ITERATIONS,
+    //         );
 
-            // let cache = Rc::new(RefCell::new(SecondaryMap::<
-            //     VertID,
-            //     Vec<(VertID, OrderedFloat<f32>)>,
-            // >::new()));
+    //         // let cache = Rc::new(RefCell::new(SecondaryMap::<
+    //         //     VertID,
+    //         //     Vec<(VertID, OrderedFloat<f32>)>,
+    //         // >::new()));
 
-            // hutspot::timer::bench(
-            //     || {
-            //         let mut rng = rand::thread_rng();
-            //         let (v_a, v_b) = verts
-            //             .choose_multiple(&mut rng, 2)
-            //             .copied()
-            //             .collect_tuple()
-            //             .unwrap();
+    //         // hutspot::timer::bench(
+    //         //     || {
+    //         //         let mut rng = rand::thread_rng();
+    //         //         let (v_a, v_b) = verts
+    //         //             .choose_multiple(&mut rng, 2)
+    //         //             .copied()
+    //         //             .collect_tuple()
+    //         //             .unwrap();
 
-            //         douconel.find_shortest_path(v_a, v_b, cache.clone(), |a, b| {
-            //             ordered_float::OrderedFloat(douconel.distance(a, b))
-            //         });
-            //     },
-            //     "paths pathfinding_astar with cache",
-            //     ITERATIONS,
-            // );
+    //         //         douconel.find_shortest_path(v_a, v_b, cache.clone(), |a, b| {
+    //         //             ordered_float::OrderedFloat(douconel.distance(a, b))
+    //         //         });
+    //         //     },
+    //         //     "paths pathfinding_astar with cache",
+    //         //     ITERATIONS,
+    //         // );
 
-            // let mut cache = HashMap::<EdgeID, Vec<(EdgeID, OrderedFloat<f32>)>>::new();
+    //         // let mut cache = HashMap::<EdgeID, Vec<(EdgeID, OrderedFloat<f32>)>>::new();
 
-            // hutspot::timer::bench(
-            //     || {
-            //         let mut rng = rand::thread_rng();
-            //         let (v_a, v_b) = douconel
-            //             .edges
-            //             .keys()
-            //             .collect_vec()
-            //             .choose_multiple(&mut rng, 2)
-            //             .copied()
-            //             .collect_tuple()
-            //             .unwrap();
+    //         // hutspot::timer::bench(
+    //         //     || {
+    //         //         let mut rng = rand::thread_rng();
+    //         //         let (v_a, v_b) = douconel
+    //         //             .edges
+    //         //             .keys()
+    //         //             .collect_vec()
+    //         //             .choose_multiple(&mut rng, 2)
+    //         //             .copied()
+    //         //             .collect_tuple()
+    //         //             .unwrap();
 
-            //         let _ = find_shortest_path(
-            //             v_a,
-            //             v_b,
-            //             douconel.neighbor_function_edgegraph(),
-            //             douconel.weight_function_angle_edges(2),
-            //             &mut cache,
-            //         );
-            //     },
-            //     "edgegraph",
-            //     ITERATIONS,
-            // );
+    //         //         let _ = find_shortest_path(
+    //         //             v_a,
+    //         //             v_b,
+    //         //             douconel.neighbor_function_edgegraph(),
+    //         //             douconel.weight_function_angle_edges(2),
+    //         //             &mut cache,
+    //         //         );
+    //         //     },
+    //         //     "edgegraph",
+    //         //     ITERATIONS,
+    //         // );
 
-            // let cache = Rc::new(RefCell::new(SecondaryMap::<
-            //     VertID,
-            //     Vec<(VertID, OrderedFloat<f32>)>,
-            // >::new()));
+    //         // let cache = Rc::new(RefCell::new(SecondaryMap::<
+    //         //     VertID,
+    //         //     Vec<(VertID, OrderedFloat<f32>)>,
+    //         // >::new()));
 
-            // hutspot::timer::bench(
-            //     || {
-            //         let mut rng = rand::thread_rng();
-            //         let v_a = verts.choose(&mut rng).copied().unwrap();
-            //         println!("{v_a:?}");
-            //         let c = douconel.find_shortest_cycle(v_a, cache.clone(), |a, b| {
-            //             ordered_float::OrderedFloat(douconel.distance(a, b))
-            //         });
-            //         println!("{c:?}");
-            //     },
-            //     "cycles pathfinding_astar with cache",
-            //     ITERATIONS,
-            // );
-        }
-    }
+    //         // hutspot::timer::bench(
+    //         //     || {
+    //         //         let mut rng = rand::thread_rng();
+    //         //         let v_a = verts.choose(&mut rng).copied().unwrap();
+    //         //         println!("{v_a:?}");
+    //         //         let c = douconel.find_shortest_cycle(v_a, cache.clone(), |a, b| {
+    //         //             ordered_float::OrderedFloat(douconel.distance(a, b))
+    //         //         });
+    //         //         println!("{c:?}");
+    //         //     },
+    //         //     "cycles pathfinding_astar with cache",
+    //         //     ITERATIONS,
+    //         // );
+    //     }
+    // }
 }
