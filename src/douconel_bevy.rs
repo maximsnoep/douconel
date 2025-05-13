@@ -1,4 +1,5 @@
 use crate::{douconel::Douconel, douconel_embedded::HasPosition};
+use core::panic;
 use slotmap::Key;
 use std::collections::HashMap;
 
@@ -19,31 +20,38 @@ impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key
         for face_id in self.faces.keys() {
             let mut corners = self.corners(face_id);
 
-            'outer: while corners.len() >= 3 {
-                for i in 0..corners.len() {
-                    let j = (i + 1) % corners.len();
-                    let k = (i + 2) % corners.len();
+            match corners.len() {
+                0 | 1 | 2 => panic!("Face {:?} has too few corners", face_id),
+                3 => {
+                    let triangle = [corners[0], corners[1], corners[2]];
+                    for vertex_id in triangle {
+                        let position = self.position(vertex_id);
+                        vertex_positions.push(BevyVec::new(position.x as f32, position.y as f32, position.z as f32));
+                        let normal = self.vert_normal(vertex_id);
+                        vertex_normals.push(BevyVec::new(normal.x as f32, normal.y as f32, normal.z as f32));
+                        let color = color_map.get(&face_id).unwrap_or(&hutspot::color::BLACK);
+                        let color_lrgb = BevyColor::srgb(color[0], color[1], color[2]).to_linear();
+                        vertex_colors.push([color_lrgb.red, color_lrgb.green, color_lrgb.blue, 1.]);
+                        vertex_uvs.push([0., 0.]);
+                    }
+                    continue;
+                }
+                4 => {
+                    let quad = [corners[0], corners[1], corners[2], corners[3]];
+                    // let d1 = (v0 - v2).norm();
+                    // let d2 = (v1 - v3).norm();
+                    // if d1 < d2 {
+                    //     // Split along v0-v2
+                    // } else {
+                    //     // Split along v1-v3
+                    // }
 
-                    let a = self.position(corners[i]);
-                    let b = self.position(corners[j]);
-                    let c = self.position(corners[k]);
-                    let n = self.normal(face_id);
-
-                    if (hutspot::geom::calculate_orientation(a, b, c, n) == hutspot::geom::Orientation::CCW
-                        || hutspot::geom::calculate_orientation(a, b, c, n) == hutspot::geom::Orientation::C)
-                        && corners
-                            .clone()
-                            .into_iter()
-                            .filter(|&corner| corner != corners[i] && corner != corners[j] && corner != corners[k])
-                            .all(|corner| {
-                                !hutspot::geom::is_point_inside_triangle(
-                                    self.position(corner),
-                                    (self.position(corners[i]), self.position(corners[j]), self.position(corners[k])),
-                                )
-                            })
-                    {
-                        let triangle = [corners[i], corners[j], corners[k]];
-                        for vertex_id in triangle {
+                    let d1 = (self.position(corners[0]) - self.position(corners[2])).norm();
+                    let d2 = (self.position(corners[1]) - self.position(corners[3])).norm();
+                    if d1 < d2 {
+                        let triangle1 = [corners[0], corners[1], corners[2]];
+                        let triangle2 = [corners[2], corners[3], corners[0]];
+                        for vertex_id in triangle1 {
                             let position = self.position(vertex_id);
                             vertex_positions.push(BevyVec::new(position.x as f32, position.y as f32, position.z as f32));
                             let normal = self.vert_normal(vertex_id);
@@ -53,10 +61,43 @@ impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key
                             vertex_colors.push([color_lrgb.red, color_lrgb.green, color_lrgb.blue, 1.]);
                             vertex_uvs.push([0., 0.]);
                         }
-
-                        corners.remove(j);
-                        continue 'outer;
+                        for vertex_id in triangle2 {
+                            let position = self.position(vertex_id);
+                            vertex_positions.push(BevyVec::new(position.x as f32, position.y as f32, position.z as f32));
+                            let normal = self.vert_normal(vertex_id);
+                            vertex_normals.push(BevyVec::new(normal.x as f32, normal.y as f32, normal.z as f32));
+                            let color = color_map.get(&face_id).unwrap_or(&hutspot::color::BLACK);
+                            let color_lrgb = BevyColor::srgb(color[0], color[1], color[2]).to_linear();
+                            vertex_colors.push([color_lrgb.red, color_lrgb.green, color_lrgb.blue, 1.]);
+                            vertex_uvs.push([0., 0.]);
+                        }
+                    } else {
+                        let triangle1 = [corners[0], corners[1], corners[3]];
+                        let triangle2 = [corners[1], corners[2], corners[3]];
+                        for vertex_id in triangle1 {
+                            let position = self.position(vertex_id);
+                            vertex_positions.push(BevyVec::new(position.x as f32, position.y as f32, position.z as f32));
+                            let normal = self.vert_normal(vertex_id);
+                            vertex_normals.push(BevyVec::new(normal.x as f32, normal.y as f32, normal.z as f32));
+                            let color = color_map.get(&face_id).unwrap_or(&hutspot::color::BLACK);
+                            let color_lrgb = BevyColor::srgb(color[0], color[1], color[2]).to_linear();
+                            vertex_colors.push([color_lrgb.red, color_lrgb.green, color_lrgb.blue, 1.]);
+                            vertex_uvs.push([0., 0.]);
+                        }
+                        for vertex_id in triangle2 {
+                            let position = self.position(vertex_id);
+                            vertex_positions.push(BevyVec::new(position.x as f32, position.y as f32, position.z as f32));
+                            let normal = self.vert_normal(vertex_id);
+                            vertex_normals.push(BevyVec::new(normal.x as f32, normal.y as f32, normal.z as f32));
+                            let color = color_map.get(&face_id).unwrap_or(&hutspot::color::BLACK);
+                            let color_lrgb = BevyColor::srgb(color[0], color[1], color[2]).to_linear();
+                            vertex_colors.push([color_lrgb.red, color_lrgb.green, color_lrgb.blue, 1.]);
+                            vertex_uvs.push([0., 0.]);
+                        }
                     }
+                }
+                _ => {
+                    panic!("Face {:?} has too many corners", face_id);
                 }
             }
         }

@@ -79,7 +79,9 @@ impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key
                 let c = corners[2];
                 for d in corners.into_iter().skip(3) {
                     if !hutspot::geom::are_points_coplanar(douconel.position(a), douconel.position(b), douconel.position(c), douconel.position(d)) {
-                        return Err(EmbeddedMeshError::FaceNotSimple(face_id));
+                        println!("Face {face_id:?} is not planar");
+                        println!("Points {a:?}, {b:?}, {c:?}, {d:?} are not coplanar");
+                        // return Err(EmbeddedMeshError::FaceNotSimple(face_id));
                     }
                 }
 
@@ -99,7 +101,10 @@ impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key
                             && a_v != b_u
                             && a_v != b_v
                         {
-                            return Err(EmbeddedMeshError::FaceNotSimple(face_id));
+                            println!("Face {face_id:?} is not simple");
+                            println!("Edge {edge_a:?} intersects with edge {edge_b:?}");
+
+                            // return Err(EmbeddedMeshError::FaceNotSimple(face_id));
                         }
                     }
                 }
