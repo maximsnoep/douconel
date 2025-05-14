@@ -74,14 +74,11 @@ impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key
                 }
 
                 // Check that the face is planar
+
                 let a = corners[0];
-                let b = corners[1];
-                let c = corners[2];
-                for d in corners.into_iter().skip(3) {
-                    if !hutspot::geom::are_points_coplanar(douconel.position(a), douconel.position(b), douconel.position(c), douconel.position(d)) {
-                        println!("Face {face_id:?} is not planar");
-                        println!("Points {a:?}, {b:?}, {c:?}, {d:?} are not coplanar");
-                        // return Err(EmbeddedMeshError::FaceNotSimple(face_id));
+                for o in corners.into_iter().skip(1) {
+                    if douconel.position(a) == douconel.position(o) {
+                        println!("WARN: Face {face_id:?} has two identical corners: {a:?} and {o:?}");
                     }
                 }
 
@@ -101,10 +98,7 @@ impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key
                             && a_v != b_u
                             && a_v != b_v
                         {
-                            println!("Face {face_id:?} is not simple");
-                            println!("Edge {edge_a:?} intersects with edge {edge_b:?}");
-
-                            // return Err(EmbeddedMeshError::FaceNotSimple(face_id));
+                            return Err(EmbeddedMeshError::FaceNotSimple(face_id));
                         }
                     }
                 }
@@ -224,7 +218,8 @@ impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key
     #[must_use]
     pub fn edge_normal(&self, id: EdgeID) -> Vector3D {
         let [f1, f2] = self.faces(id);
-        (self.normal(f1) + self.normal(f2)).normalize()
+        let normal = (self.normal(f1) + self.normal(f2)).normalize();
+        normal
     }
 
     // Get the angle between two edges at a common vertex.
@@ -233,6 +228,18 @@ impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key
         let a_b = self.position(b) - self.position(a);
         let b_c = self.position(b) - self.position(c);
         self.vec_angle(a_b, b_c)
+    }
+
+    // List of all edges in the mesh (positions of endpoints)
+    #[must_use]
+    pub fn edges_positions(&self) -> Vec<(Vector3D, Vector3D)> {
+        self.edge_ids()
+            .iter()
+            .map(|&edge_id| {
+                let (u, v) = self.endpoints(edge_id);
+                (self.position(u), self.position(v))
+            })
+            .collect()
     }
 
     // Weight function
