@@ -1,7 +1,14 @@
 use crate::douconel::{Douconel, MeshError};
 use bimap::BiHashMap;
+use bvh::{
+    aabb::{Aabb, Bounded},
+    bounding_hierarchy::BHShape,
+    bvh::Bvh,
+    point_query::PointDistance,
+};
 use hutspot::geom::Vector2D;
 use itertools::Itertools;
+use kdtree::{KdTree, distance::squared_euclidean};
 use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize};
 use slotmap::Key;
@@ -58,7 +65,7 @@ impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key
         let non_embedded = Self::from_faces(faces);
         if let Ok((mut douconel, vertex_map, face_map)) = non_embedded {
             for (inp_vertex_id, inp_vertex_position) in vertex_positions.iter().copied().enumerate() {
-                let vertex_id = vertex_map.get_by_left(&inp_vertex_id).copied().unwrap_or_default();
+                let vertex_id = vertex_map.get_by_left(&inp_vertex_id).copied().unwrap();
                 if let Some(vert) = douconel.verts.get_mut(vertex_id) {
                     vert.set_position(inp_vertex_position);
                 }
@@ -77,7 +84,7 @@ impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key
 
                 let a = corners[0];
                 for o in corners.into_iter().skip(1) {
-                    if douconel.position(a) == douconel.position(o) {
+                    if douconel.position(a) == douconel.position(o) && douconel.position(a) != Vector3D::zeros() {
                         println!("WARN: Face {face_id:?} has two identical corners: {a:?} and {o:?}");
                     }
                 }
@@ -218,8 +225,7 @@ impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key
     #[must_use]
     pub fn edge_normal(&self, id: EdgeID) -> Vector3D {
         let [f1, f2] = self.faces(id);
-        let normal = (self.normal(f1) + self.normal(f2)).normalize();
-        normal
+        (self.normal(f1) + self.normal(f2)).normalize()
     }
 
     // Get the angle between two edges at a common vertex.
@@ -240,6 +246,24 @@ impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key
                 (self.position(u), self.position(v))
             })
             .collect()
+    }
+
+    #[must_use]
+    pub fn get_aabb(&self) -> (Vector3D, Vector3D) {
+        // An axis-aligned bounding box, defined by:
+        // a center,
+        // the distances from the center to each faces along the axis, the faces are orthogonal to the axis.
+
+        let (min, max) = self
+            .verts
+            .values()
+            .fold((Vector3D::repeat(f64::INFINITY), Vector3D::repeat(f64::NEG_INFINITY)), |(min, max), v| {
+                (min.zip_map(&v.position(), f64::min), max.zip_map(&v.position(), f64::max))
+            });
+
+        let center = (min + max) / 2.0;
+        let half_extents = (max - min) / 2.0;
+        (center, half_extents)
     }
 
     // Weight function
@@ -308,23 +332,121 @@ impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key
         let (a1, a2) = (self.wedge_alpha((b, &w1)), self.wedge_alpha((b, &w2)));
         if a1 < a2 { (w1, a1) } else { (w2.into_iter().rev().collect_vec(), a2) }
     }
+}
+
+// implement default for KdTree using the New Type Idiom
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TreeD<VertID: Key>(KdTree<f64, VertID, [f64; 3]>);
+impl<VertID: Key> TreeD<VertID> {
+    #[must_use]
+    pub fn nearest(&self, point: &[f64; 3]) -> (f64, VertID) {
+        let neighbors = self.0.nearest(point, 1, &squared_euclidean).unwrap();
+        let (d, i) = neighbors.first().unwrap();
+        (*d, **i)
+    }
+
+    fn add(&mut self, point: [f64; 3], index: VertID) {
+        self.0.add(point, index).unwrap();
+    }
+}
+impl<VertID: Key> Default for TreeD<VertID> {
+    fn default() -> Self {
+        Self(KdTree::new(3))
+    }
+}
+
+// implement default for Bvh using the New Type Idiom
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Bhv<FaceID: Key>((Bvh<f64, 3>, Vec<TriangleBvhShape<FaceID>>));
+impl<FaceID: Key> Bhv<FaceID> {
+    #[must_use]
+    pub fn nearest(&self, point: &[f64; 3]) -> FaceID {
+        let neighbor = self.0.0.nearest_to(nalgebra::Point3::from_slice(point), &self.0.1);
+        let (t, _) = neighbor.unwrap();
+        t.real_index
+    }
+    fn overwrite(&mut self, shapes: &mut [TriangleBvhShape<FaceID>]) {
+        self.0.0 = Bvh::build(shapes);
+        self.0.1 = shapes.to_vec();
+    }
+}
+impl<FaceID: Key> Default for Bhv<FaceID> {
+    fn default() -> Self {
+        Self((Bvh::build::<TriangleBvhShape<FaceID>>(&mut []), Vec::new()))
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct TriangleBvhShape<FaceID: Key> {
+    corners: [Vector3D; 3],
+    node_index: usize,
+    real_index: FaceID,
+}
+
+impl<FaceID: Key> PointDistance<f64, 3> for TriangleBvhShape<FaceID> {
+    fn distance_squared(&self, query_point: nalgebra::Point<f64, 3>) -> f64 {
+        hutspot::geom::distance_to_triangle(
+            Vector3D::new(query_point[0], query_point[1], query_point[2]),
+            (self.corners[0], self.corners[1], self.corners[2]),
+        )
+    }
+}
+
+impl<FaceID: Key> Bounded<f64, 3> for TriangleBvhShape<FaceID> {
+    fn aabb(&self) -> Aabb<f64, 3> {
+        let min_x = self.corners.iter().map(|v| v.x).fold(f64::MAX, f64::min);
+        let min_y = self.corners.iter().map(|v| v.y).fold(f64::MAX, f64::min);
+        let min_z = self.corners.iter().map(|v| v.z).fold(f64::MAX, f64::min);
+        let max_x = self.corners.iter().map(|v| v.x).fold(f64::MIN, f64::max);
+        let max_y = self.corners.iter().map(|v| v.y).fold(f64::MIN, f64::max);
+        let max_z = self.corners.iter().map(|v| v.z).fold(f64::MIN, f64::max);
+        let min = nalgebra::Point3::new(min_x, min_y, min_z);
+        let max = nalgebra::Point3::new(max_x, max_y, max_z);
+        Aabb::with_bounds(min, max)
+    }
+}
+
+impl<FaceID: Key> BHShape<f64, 3> for TriangleBvhShape<FaceID> {
+    fn set_bh_node_index(&mut self, index: usize) {
+        self.node_index = index;
+    }
+
+    fn bh_node_index(&self) -> usize {
+        self.node_index
+    }
+}
+
+// Implement functions for embedded mesh that construct and return kdtree or bvh
+impl<VertID: Key, V: Default + HasPosition, EdgeID: Key, E: Default, FaceID: Key, F: Default + Clone> Douconel<VertID, V, EdgeID, E, FaceID, F> {
+    #[must_use]
+    pub fn kdtree(&self) -> TreeD<VertID> {
+        let mut tree = TreeD::default();
+        for (id, vert) in &self.verts {
+            tree.add(vert.position().into(), id);
+        }
+        tree
+    }
 
     #[must_use]
-    pub fn get_aabb(&self) -> (Vector3D, Vector3D) {
-        // An axis-aligned bounding box, defined by:
-        // a center,
-        // the distances from the center to each faces along the axis, the faces are orthogonal to the axis.
+    pub fn bvh(&self) -> Bhv<FaceID> {
+        let mut bvh = Bhv::default();
+        let mut triangles = self
+            .face_ids()
+            .iter()
+            .enumerate()
+            .map(|(i, &face_id)| TriangleBvhShape {
+                corners: [
+                    self.position(self.corners(face_id)[0]),
+                    self.position(self.corners(face_id)[1]),
+                    self.position(self.corners(face_id)[2]),
+                ],
+                node_index: i,
+                real_index: face_id,
+            })
+            .collect_vec();
 
-        let max_x = self.verts.values().map(|v| OrderedFloat(v.position()[0])).max().unwrap().0;
-        let min_x = self.verts.values().map(|v| OrderedFloat(v.position()[0])).min().unwrap().0;
-        let max_y = self.verts.values().map(|v| OrderedFloat(v.position()[1])).max().unwrap().0;
-        let min_y = self.verts.values().map(|v| OrderedFloat(v.position()[1])).min().unwrap().0;
-        let max_z = self.verts.values().map(|v| OrderedFloat(v.position()[2])).max().unwrap().0;
-        let min_z = self.verts.values().map(|v| OrderedFloat(v.position()[2])).min().unwrap().0;
-        let center = Vector3D::new((max_x + min_x) / 2., (max_y + min_y) / 2., (max_z + min_z) / 2.);
-        let half_extents = Vector3D::new((max_x - min_x) / 2., (max_y - min_y) / 2., (max_z - min_z) / 2.);
-
-        (center, half_extents)
+        bvh.overwrite(&mut triangles);
+        bvh
     }
 }
 
